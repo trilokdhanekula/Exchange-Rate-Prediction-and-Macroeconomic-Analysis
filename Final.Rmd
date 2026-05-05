@@ -1,0 +1,3028 @@
+---
+title: "Final"
+author: "Nikita, Trilok, Deekshita"
+date: "2024-12-10"
+output: html_document
+---
+
+#reading Exchange Rates data
+
+```{r}
+library(readxl)
+
+Australia  <- read_excel("Exchange Rate - AUS.xls",skip = 10)
+Canada <- read_excel("Exchange Rate - Canada.xls",skip = 10)
+Euro <- read_excel("Exchange Rate - Euro.xls",skip = 10)
+Japan<- read_excel("Exchange Rate - Japan.xls",skip = 10)
+UK <- read_excel("Exchange Rate - UK.xls",skip = 10)
+```
+
+```{r}
+library(dplyr)
+
+# Create a country code lookup table
+country_codes <- data.frame(
+  Country = c("Australia", "Canada", "Euro", "Japan", "UK"),
+  Country_ID = 1:5  # Assign numbers alphabetically
+)
+
+# Add the Country_ID column to each dataset
+Australia <- Australia %>%
+  mutate(Country = "Australia") %>%
+  left_join(country_codes, by = "Country")
+
+Canada <- Canada %>%
+  mutate(Country = "Canada") %>%
+  left_join(country_codes, by = "Country")
+
+Euro <- Euro %>%
+  mutate(Country = "Euro") %>%
+  left_join(country_codes, by = "Country")
+
+Japan <- Japan %>%
+  mutate(Country = "Japan") %>%
+  left_join(country_codes, by = "Country")
+
+UK <- UK %>%
+  mutate(Country = "UK") %>%
+  left_join(country_codes, by = "Country")
+
+# Check the result for one dataset (e.g., Australia)
+head(Australia)
+head(Canada)
+```
+```{r}
+
+# Rename columns in each dataset to make them consistent
+Exchangerates_Australia <- Australia %>%
+  rename( ExchangeRate = `DEXUSAL`) %>%  # Replace 'Date' and 'Rate' with actual names
+  mutate(Country = "Australia")
+
+
+Exchangerates_Canada <- Canada %>%
+  rename( ExchangeRate = `DEXCAUS`) %>%
+  mutate(Country = "Canada")
+
+Exchangerates_Euro <- Euro %>%
+  rename(ExchangeRate = `DEXUSEU`) %>%
+  mutate(Country = "Euro")
+
+
+Exchangerates_Japan <- Japan %>%
+  rename( ExchangeRate = `DEXJPUS`) %>%
+  mutate(Country = "Japan")
+
+
+Exchangerates_UK <- UK %>%
+  rename( ExchangeRate = `DEXUSUK`) %>%
+  mutate(Country = "UK")
+```
+
+```{r}
+library(dplyr)
+
+# Rearrange columns in each dataset
+Exchangerates_Australia <- Exchangerates_Australia %>%
+  select(observation_date, Country, Country_ID, ExchangeRate)
+
+Exchangerates_Canada <- Exchangerates_Canada %>%
+  select(observation_date, Country, Country_ID, ExchangeRate)
+
+Exchangerates_Euro <- Exchangerates_Euro %>%
+  select(observation_date, Country, Country_ID, ExchangeRate)
+
+Exchangerates_Japan <- Exchangerates_Japan %>%
+  select(observation_date, Country, Country_ID, ExchangeRate)
+
+Exchangerates_UK <- Exchangerates_UK %>%
+  select(observation_date, Country, Country_ID, ExchangeRate)
+
+```
+```{r}
+library(dplyr)
+
+# Function to calculate percentage difference
+calculate_percentage_difference <- function(data) {
+  data %>%
+    arrange(observation_date) %>%  # Ensure data is sorted by date
+    mutate(ERPC = (ExchangeRate - lag(ExchangeRate)) / lag(ExchangeRate))
+}
+
+# Apply the function to each dataset
+Exchangerates_Australia <- calculate_percentage_difference(Exchangerates_Australia)
+Exchangerates_Canada <- calculate_percentage_difference(Exchangerates_Canada)
+Exchangerates_Euro <- calculate_percentage_difference(Exchangerates_Euro)
+Exchangerates_Japan <- calculate_percentage_difference(Exchangerates_Japan)
+Exchangerates_UK <- calculate_percentage_difference(Exchangerates_UK)
+
+# Preview the datasets
+head(Exchangerates_Australia)
+head(Exchangerates_Canada)
+head(Exchangerates_Euro)
+head(Exchangerates_Japan)
+head(Exchangerates_UK)
+```
+```{r}
+# Combine all datasets by stacking them as rows
+combined_exchange_data <- bind_rows(
+  Exchangerates_Australia,
+  Exchangerates_Canada,
+  Exchangerates_Euro,
+  Exchangerates_Japan,
+  Exchangerates_UK
+)
+
+# Arrange the combined data by 'observation_date' and 'CountryCode' (optional)
+combined_exchange_data <- combined_exchange_data %>%
+  arrange(Country_ID, observation_date)
+
+# Remove rows where ExchangeRate is 0
+combined_exchange_data <- combined_exchange_data %>%
+  filter(ExchangeRate != 0)
+
+# Preview the updated dataset
+head(combined_exchange_data)
+
+# Check if any rows with ExchangeRate == 0 remain
+sum(combined_exchange_data$ExchangeRate == 0)
+
+# Preview the combined data
+head(combined_exchange_data)
+```
+#changing date format
+```{r}
+library(readxl)
+SP500 <- read_excel("SP500.xlsx")
+
+head(SP500)
+# Check the column names of the SP500 dataset
+colnames(SP500)
+# Ensure the 'date' column is converted to Date type and formatted as "YYYY-MM-DD"
+SP500$Date <- format(as.Date(SP500$Date, format = "%d-%b-%y"), "%Y-%m-%d")
+
+# Check the result to ensure the format change was successful
+head(SP500)
+
+# Keep only the "Date" and "Adj Close" columns using dplyr
+library(dplyr)
+
+SP500 <- SP500 %>%
+  select(Date, `Adj Close `)
+
+# Preview the updated dataset
+head(SP500)
+
+# Rename "Adj Close" to "SP500"
+colnames(SP500)[2] <- "SP500"
+
+#date to "observation_date"
+colnames(SP500)[1] <- "observation_date"
+
+library(dplyr)
+library(lubridate)
+library(tidyr)
+
+# Create a daily date sequence for SP500
+SP500 <- SP500 %>%
+  mutate(observation_date = as.Date(observation_date)) %>%  # Ensure date format
+  complete(observation_date = seq.Date(min(observation_date), max(observation_date), by = "day"))  # Fill missing dates
+
+
+SP500 <- SP500 %>%
+  mutate(SP500 = zoo::na.approx(SP500, na.rm = FALSE)) %>%  # Interpolate missing values
+  mutate(SP500 = ifelse(is.na(SP500),
+                        zoo::na.locf(SP500, fromLast = FALSE, na.rm = FALSE),  # Forward fill
+                        SP500)) %>%
+  mutate(SP500 = ifelse(is.na(SP500),
+                        zoo::na.locf(SP500, fromLast = TRUE, na.rm = FALSE),  # Backward fill
+                        SP500))
+
+# Preview the updated dataset
+head(SP500)
+```
+```{r}
+library(dplyr)
+
+# Ensure SP500 values are numeric (if not already)
+SP500 <- SP500 %>%
+  mutate(SP500 = as.numeric(SP500))
+
+# Calculate the percentage change
+SP500 <- SP500 %>%
+  arrange(observation_date) %>%  # Ensure data is sorted by date
+  mutate(
+    SP500PC = (SP500 - lag(SP500)) / lag(SP500)   # Percentage change formula
+  )
+
+# Preview the updated dataset
+head(SP500)
+```
+#reading and updating the VIX data
+```{r}
+library(readxl)
+library(tidyr)
+VIX <- read_excel("VIX.xls",skip = 10)
+
+# Remove the time component from the observation_date column
+VIX$observation_date <- as.Date(VIX$observation_date)
+
+VIX <- VIX %>%
+  mutate(observation_date = as.Date(observation_date)) %>%  # Ensure date format
+  complete(observation_date = seq.Date(min(observation_date), max(observation_date), by = "day"))  # Fill missing dates
+
+VIX <- VIX %>%
+  mutate(VIXCLS = ifelse(VIXCLS == 0, NA, VIXCLS)) %>%  # Convert 0 to NA for processing
+  mutate(VIXCLS = zoo::na.approx(VIXCLS, na.rm = FALSE)) %>%  # Interpolate missing values
+  mutate(VIXCLS = ifelse(is.na(VIXCLS),
+                         zoo::na.locf(VIXCLS, fromLast = FALSE, na.rm = FALSE),  # Forward fill
+                         VIXCLS)) %>%
+  mutate(VIXCLS = ifelse(is.na(VIXCLS),
+                         zoo::na.locf(VIXCLS, fromLast = TRUE, na.rm = FALSE),  # Backward fill
+                         VIXCLS))
+
+
+head(VIX)
+```
+
+```{r}
+# Calculate the relative difference for the VIX values
+VIX <- VIX %>%
+  arrange(observation_date) %>%  # Ensure the data is sorted by date
+  mutate(
+    VIXPC = (VIXCLS - lag(VIXCLS)) / lag(VIXCLS)   # Replace "VIX" with the correct column name
+  )
+
+# Preview the updated dataset with the new column
+head(VIX)
+```
+
+#reading crude oil data
+```{r}
+
+crudeoil <- read_excel("Crude Oil WTI.xlsx")
+print(crudeoil)
+colnames(crudeoil)
+
+```
+#deleting columns in crude oil and keeping date and adj close
+
+```{r}
+# Select Date and Adj Close columns
+crudeoil <- crudeoil %>%
+  select(observation_date = Date, crude_oil = `Adj Close `)
+
+crudeoil <- crudeoil %>%
+  mutate(observation_date = as.Date(observation_date)) %>%  # Ensure date format
+  complete(observation_date = seq.Date(min(observation_date), max(observation_date), by = "day"))  # Fill missing dates
+
+crudeoil <- crudeoil %>%
+  mutate(crude_oil = zoo::na.approx(crude_oil, na.rm = FALSE)) %>%  # Interpolate missing values
+  mutate(crude_oil = ifelse(is.na(crude_oil),
+                            zoo::na.locf(crude_oil, fromLast = FALSE, na.rm = FALSE),  # Forward fill
+                            crude_oil)) %>%
+  mutate(crude_oil = ifelse(is.na(crude_oil),
+                            zoo::na.locf(crude_oil, fromLast = TRUE, na.rm = FALSE),  # Backward fill
+                            crude_oil))
+
+# View cleaned data
+head(crudeoil)
+
+```
+```{r}
+# Calculate the percentage change
+crudeoil <- crudeoil %>%
+  arrange(observation_date) %>%  # Ensure data is sorted by Date
+  mutate(
+  crudeoilPC= (crude_oil - lag(crude_oil)) / lag(crude_oil)   # Percentage change formula
+  )
+
+# View the updated dataset
+head(crudeoil)
+```
+```{r}
+#Unemployment rate
+
+#reading Unemployment rate Data
+
+library(readxl)
+UNEMP_AUSTRALIA <- read_excel("Unemployment Rate - Australia.xls",skip = 10)
+UNEMP_CANADA <- read_excel("Unemployment Rate - Canada.xls",skip = 10)
+UNEMP_EURO <- read_excel("Unemployment Rate - Euro.xls",skip = 10)
+UNEMP_JAPAN <- read_excel("Unemployment Rate - Japan.xls",skip = 10)
+UNEMP_UK <- read_excel("Unemployment Rate - UK.xls",skip = 10)
+UNEMP_US <- read_excel("Unemployment Rate - US.xls",skip = 10)
+
+print(UNEMP_AUSTRALIA)
+
+
+
+library(dplyr)
+
+# Create a country code lookup table
+country_codes <- data.frame(
+  Country = c("Australia", "Canada", "Euro", "Japan", "UK", "US"),
+  Country_ID = 1:6  # Assign numbers alphabetically
+)
+
+# Add the Country_ID column to each unemployment dataset
+UNEMP_AUSTRALIA <- UNEMP_AUSTRALIA %>%
+  mutate(Country = "Australia") %>%
+  left_join(country_codes, by = "Country")
+
+UNEMP_CANADA <- UNEMP_CANADA %>%
+  mutate(Country = "Canada") %>%
+  left_join(country_codes, by = "Country")
+
+UNEMP_EURO <- UNEMP_EURO %>%
+  mutate(Country = "Euro") %>%
+  left_join(country_codes, by = "Country")
+
+UNEMP_JAPAN <- UNEMP_JAPAN %>%
+  mutate(Country = "Japan") %>%
+  left_join(country_codes, by = "Country")
+
+UNEMP_UK <- UNEMP_UK %>%
+  mutate(Country = "UK") %>%
+  left_join(country_codes, by = "Country")
+
+UNEMP_US <- UNEMP_US %>%
+  mutate(Country = "US") %>%
+  left_join(country_codes, by = "Country")
+
+# Check the result for one dataset (e.g., UNEMP_AUSTRALIA)
+head(UNEMP_AUSTRALIA)
+print(UNEMP_CANADA)
+colnames(UNEMP_AUSTRALIA)
+colnames(UNEMP_CANADA)
+colnames(UNEMP_EURO)
+colnames(UNEMP_UK)
+
+
+
+library(dplyr)
+
+# Rename the column in UNEMP_AUSTRALIA
+UNEMP_AUSTRALIA <- UNEMP_AUSTRALIA %>%
+  rename(`Unemployment Rate` = LRUNTTTTAUM156S)
+
+# Repeat for other datasets
+UNEMP_CANADA <- UNEMP_CANADA %>%
+  rename(`Unemployment Rate` = LRUNTTTTCAM156S)
+
+UNEMP_EURO <- UNEMP_EURO %>%
+  rename(`Unemployment Rate` = LRHUTTTTEZM156S)
+
+UNEMP_JAPAN <- UNEMP_JAPAN %>%
+  rename(`Unemployment Rate` = LRHUTTTTJPM156S)
+
+UNEMP_UK <- UNEMP_UK %>%
+  rename(`Unemployment Rate` = LRHUTTTTGBM156S)
+
+UNEMP_US <- UNEMP_US %>%
+  rename(`US_UnemploymentRate` = UNRATE)
+
+# Preview one dataset to ensure the change
+head(UNEMP_AUSTRALIA)
+head(UNEMP_CANADA)
+
+
+
+
+library(dplyr)
+
+# Function to calculate percentage changes and relative differences
+calculate_relative_difference <- function(df, country_name) {
+  df %>%
+    left_join(UNEMP_US, by = "observation_date") %>%  # Add US unemployment rate
+    arrange(observation_date) %>%
+    mutate(
+      Country = country_name,
+      PercentageChange_Country = (lag(`Unemployment Rate`) - `Unemployment Rate`) / lag(`Unemployment Rate`) * 100,
+      PercentageChange_US = (lag(US_UnemploymentRate) - US_UnemploymentRate) / lag(US_UnemploymentRate) * 100,
+      RelativeDifference_Unemp =  PercentageChange_US-PercentageChange_Country  # Relative difference
+    )
+}
+
+# Apply the function to each dataset
+UNEMP_AUSTRALIA <- calculate_relative_difference(UNEMP_AUSTRALIA, "Australia")
+UNEMP_CANADA <- calculate_relative_difference(UNEMP_CANADA, "Canada")
+UNEMP_EURO <- calculate_relative_difference(UNEMP_EURO, "Euro")
+UNEMP_JAPAN <- calculate_relative_difference(UNEMP_JAPAN, "Japan")
+UNEMP_UK <- calculate_relative_difference(UNEMP_UK, "UK")
+
+# Combine all processed datasets into a single dataset
+combined_unemployment_data <- bind_rows(
+  UNEMP_AUSTRALIA,
+  UNEMP_CANADA,
+  UNEMP_EURO,
+  UNEMP_JAPAN,
+  UNEMP_UK
+)
+
+# Rename Country_ID.x to Country_ID
+combined_unemployment_data <- combined_unemployment_data %>%
+  rename(Country_ID = Country_ID.x)
+
+# Keep only the desired columns
+combined_unemployment_data <- combined_unemployment_data %>%
+  select(
+    observation_date,
+    `Unemployment Rate`,
+    Country,
+    Country_ID,
+    US_UnemploymentRate,
+    PercentageChange_Country,
+    PercentageChange_US,
+    RelativeDifference_Unemp
+  )
+
+# Preview the combined data
+head(combined_unemployment_data)
+colnames(combined_unemployment_data)
+```
+```{r}
+#reading Gold Price 
+
+library(readxl)
+EXPORT <- read_excel("Gold Price - Export.xls", skip = 10)
+IMPORT <- read_excel("Gold Price - Import.xls",skip = 10)
+colnames(IMPORT)
+# Rename the column IQ12260 to GoldExport
+EXPORT <- EXPORT %>%
+  rename(GoldExport = IQ12260)
+
+# Preview the updated dataset
+head(EXPORT)
+
+IMPORT <- IMPORT %>%
+  rename(GoldImport = IR14270)
+head(IMPORT)
+```
+```{r}
+#Calculate percentage change for Gold Export
+EXPORT <- EXPORT %>%
+  arrange(observation_date) %>%  # Sort by date
+  mutate(
+    GoldExportPC = (GoldExport - lag(GoldExport)) / lag(GoldExport) 
+  )
+
+#Calculate percentage change for Gold Import
+IMPORT <- IMPORT %>%
+  arrange(observation_date) %>%  # Sort by date
+  mutate(
+   GoldImportPC = (GoldImport - lag(GoldImport)) / lag(GoldImport) 
+  )
+
+#Preview the updated datasets
+head(EXPORT)
+head(IMPORT)
+```
+```{r}
+library(readxl)
+library(tidyr)
+CPI_Australia <- read_excel("CPI - Australia.xlsx")
+CPI_Canada <- read_excel("CPI - Canada.xls",skip=10)
+CPI_Euro <- read_excel("CPI - Euro.xls",skip=10)
+CPI_Japan <- read_excel("CPI - Japan.xls",skip=10)
+CPI_UK <- read_excel("CPI - UK.xls",skip = 10)
+CPI_US <- read_excel("CPI - US.xls",skip=10)
+
+
+# Transform Dates
+CPI_Australia <- CPI_Australia %>%
+  mutate(
+    Date = case_when(
+      grepl("Q1", Date) ~ sub("Q1", "-01-01", Date),
+      grepl("Q2", Date) ~ sub("Q2", "-04-01", Date),
+      grepl("Q3", Date) ~ sub("Q3", "-07-01", Date),
+      grepl("Q4", Date) ~ sub("Q4", "-10-01", Date)
+    ),
+    Date = as.Date(Date)
+  )
+
+# Generate monthly data
+CPI_Australia <- CPI_Australia %>%
+  complete(Date = seq(min(Date), max(Date), by = "month")) %>%
+  mutate(`CPI rate` = approx(Date, `CPI rate`, Date, method = "linear")$y)
+
+# Print the first few rows of the interpolated monthly data
+cat("Monthly Data:\n")
+print(head(CPI_Australia))
+
+# Create a country code lookup table
+country_codes <- data.frame(
+  Country = c("Australia", "Canada", "Euro", "Japan", "UK", "USA"),
+  Country_ID = 1:6  # Assign numbers alphabetically
+)
+
+# Add the Country and Country_ID columns to each dataset
+CPI_Australia <- CPI_Australia %>%
+  mutate(Country = "Australia") %>%
+  left_join(country_codes, by = "Country")
+
+CPI_Canada <- CPI_Canada %>%
+  mutate(Country = "Canada") %>%
+  left_join(country_codes, by = "Country")
+
+CPI_Euro <- CPI_Euro %>%
+  mutate(Country = "Euro") %>%
+  left_join(country_codes, by = "Country")
+
+CPI_Japan <- CPI_Japan %>%
+  mutate(Country = "Japan") %>%
+  left_join(country_codes, by = "Country")
+
+CPI_UK <- CPI_UK %>%
+  mutate(Country = "UK") %>%
+  left_join(country_codes, by = "Country")
+
+CPI_US <- CPI_US %>%
+  mutate(Country = "USA") %>%
+  left_join(country_codes, by = "Country")
+
+# Check the result for one dataset (e.g., CPI_Australia)
+head(CPI_Australia)
+
+# Print the result for CPI_Canada
+print(CPI_Canada)
+```
+```{r}
+library(dplyr)
+# Repeat for other datasets
+CPI_Australia <- CPI_Australia %>%
+  rename( observation_date = Date) 
+
+CPI_Australia <- CPI_Australia %>%
+  rename(CPI = `CPI rate`)
+
+# Repeat for other datasets
+CPI_Canada <- CPI_Canada %>%
+  rename(CPI = CPALCY01CAM661N)  # Replace LRACPTTTCAM156S with the actual column name for CPI
+
+CPI_Euro <- CPI_Euro %>%
+  rename(CPI = CP0000EZ19M086NEST)  # Replace LRACTTTTEZM156S with the actual column name for CPI
+
+CPI_Japan <- CPI_Japan %>%
+  rename(CPI = CPALTT01JPM657N)  # Replace LRACPTTTJPM156S with the actual column name for CPI
+
+CPI_UK <- CPI_UK %>%
+  rename(CPI = CPALTT01GBM657N)  # Replace LRACPTTTGBM156S with the actual column name for CPI
+
+CPI_US <- CPI_US %>%
+  rename(US_CPI = CPALTT01USM657N)  # Replace CPIAUCSL with the actual column name for US CPI
+
+# Preview one dataset to ensure the change
+head(CPI_Australia)
+
+```
+```{r}
+library(dplyr)
+
+# Calculate percentage change for Australia, Canada, and Euro
+CPI_Australia <- CPI_Australia %>%
+  mutate(CPIPC = (CPI - lag(CPI)) / lag(CPI) )
+
+CPI_Canada <- CPI_Canada %>%
+  mutate(CPIPC = (CPI - lag(CPI)) / lag(CPI) )
+
+CPI_Euro <- CPI_Euro %>%
+  mutate(CPIPC = (CPI - lag(CPI)) / lag(CPI) )
+
+# Copy the CPI column to cpipc for Japan and UK
+CPI_Japan <- CPI_Japan %>%
+  mutate(CPIPC = CPI)
+
+CPI_UK <- CPI_UK %>%
+  mutate(CPIPC = CPI)
+
+# Handle US data separately, keeping only US_CPI and US_CPI_PC
+CPI_US <- CPI_US %>%
+  mutate(
+    US_CPI_PC = US_CPI  # Copy the US_CPI column directly to create US_CPI_PC
+  ) 
+
+# Preview datasets to ensure the changes
+head(CPI_Australia)
+head(CPI_Canada)
+head(CPI_Euro)
+head(CPI_Japan)
+head(CPI_UK)
+head(CPI_US)
+
+
+```
+```{r}
+library(dplyr)
+
+# Add Country and Country_ID columns to each dataset
+CPI_Australia <- CPI_Australia %>%
+  mutate(Country = "Australia", Country_ID = 1)
+
+CPI_Canada <- CPI_Canada %>%
+  mutate(Country = "Canada", Country_ID = 2)
+
+CPI_Euro <- CPI_Euro %>%
+  mutate(Country = "Euro", Country_ID = 3)
+
+CPI_Japan <- CPI_Japan %>%
+  mutate(Country = "Japan", Country_ID = 4)
+
+CPI_UK <- CPI_UK %>%
+  mutate(Country = "UK", Country_ID = 5)
+
+# Combine all datasets into one
+combined_cpi <- bind_rows(
+  CPI_Australia,
+  CPI_Canada,
+  CPI_Euro,
+  CPI_Japan,
+  CPI_UK
+)
+
+# Add the US CPI and US CPI percentage change to each country
+CPI_US_expanded <- combined_cpi %>%
+  select(observation_date) %>%
+  distinct() %>%
+  left_join(CPI_US, by = "observation_date")
+
+combined_cpi <- combined_cpi %>%
+  left_join(CPI_US_expanded, by = "observation_date")
+
+# Calculate the relative difference for each country
+combined_cpi <- combined_cpi %>%
+  mutate(RelativeDiff_CPI = US_CPI_PC - CPIPC )
+
+# Rearrange columns for clarity
+combined_cpi <- combined_cpi %>%
+  select(observation_date, Country.x, Country_ID.x, CPI, CPIPC, US_CPI, US_CPI_PC, RelativeDiff_CPI)
+
+# Preview the combined dataset
+head(combined_cpi)
+
+```
+```{r}
+# Rename columns in the combined dataset
+combined_cpi <- combined_cpi %>%
+  rename(
+    Country = Country.x,
+    Country_ID = Country_ID.x
+  )
+
+# Preview the updated dataset
+head(combined_cpi)
+
+```
+```{r}
+#Reading Real GDP Data
+
+library(readxl)
+GDP_AUSTRALIA <- read_excel("Real GDP - Australia.xls",skip = 10)
+
+GDP_CANADA <- read_excel("Real GDP - Canada.xls",skip = 10)
+
+GDP_EURO<- read_excel("Real GDP - Euro.xls",skip = 10)
+
+GDP_JAPAN <- read_excel("Real GDP - Japan.xls",skip = 10)
+
+GDP_UK <- read_excel("Real GDP - UK.xls",skip = 10)
+
+GDP_US <- read_excel("Real GDP - US.xls",skip = 10)
+```
+```{r}
+library(dplyr)
+
+# Rename the columns in each dataset
+GDP_AUSTRALIA <- GDP_AUSTRALIA %>%
+  rename(RealGDP = NGDPRSAXDCAUQ)
+
+GDP_CANADA <- GDP_CANADA %>%
+  rename(RealGDP = NGDPRSAXDCCAQ)
+
+GDP_EURO <- GDP_EURO %>%
+  rename(RealGDP = CLVMEURSCAB1GQEA19)
+
+GDP_JAPAN <- GDP_JAPAN %>%
+  rename(RealGDP = JPNRGDPEXP)
+
+GDP_UK <- GDP_UK %>%
+  rename(RealGDP = NGDPRSAXDCGBQ)
+
+GDP_US <- GDP_US %>%
+  rename(RealGDP_US = GDPC1)
+
+# Preview the datasets to ensure the changes
+head(GDP_AUSTRALIA)
+head(GDP_CANADA)
+head(GDP_EURO)
+head(GDP_JAPAN)
+head(GDP_UK)
+head(GDP_US)
+```
+
+#converting quaterly data to montly 
+```{r}
+library(lubridate)
+# Function to convert quarterly data to monthly data
+convert_quarterly_to_monthly <- function(df, gdp_column) {
+  df %>%
+    # Ensure the dates are in Date format
+    mutate(
+      observation_date = as.Date(observation_date),
+      quarter_start_date = floor_date(observation_date, "quarter")
+    ) %>%
+    # Create a sequence of monthly dates
+    complete(observation_date = seq(min(observation_date), max(observation_date) + months(2), by = "month")) %>%
+    # Interpolate the GDP values for monthly dates
+    mutate(
+      !!gdp_column := approx(observation_date, !!sym(gdp_column), observation_date, method = "linear")$y
+    ) %>%
+    select(-quarter_start_date)  # Remove the intermediate column
+}
+
+# Apply the function to each GDP dataset
+
+GDP_AUSTRALIA <- convert_quarterly_to_monthly(GDP_AUSTRALIA, "RealGDP")
+GDP_CANADA <- convert_quarterly_to_monthly(GDP_CANADA, "RealGDP")
+GDP_EURO <- convert_quarterly_to_monthly(GDP_EURO, "RealGDP")
+GDP_JAPAN <- convert_quarterly_to_monthly(GDP_JAPAN, "RealGDP")
+GDP_UK <- convert_quarterly_to_monthly(GDP_UK, "RealGDP")
+GDP_US <- convert_quarterly_to_monthly(GDP_US, "RealGDP_US")
+
+
+# Create a country code lookup table
+country_codes <- data.frame(
+  Country = c("Australia", "Canada", "Euro", "Japan", "UK", "US"),
+  Country_ID = 1:6  # Assign numbers alphabetically
+)
+
+# Add the Country_ID column to each GDP dataset
+GDP_AUSTRALIA <- GDP_AUSTRALIA %>%
+  mutate(Country = "Australia") %>%
+  left_join(country_codes, by = "Country")
+
+GDP_CANADA <- GDP_CANADA %>%
+  mutate(Country = "Canada") %>%
+  left_join(country_codes, by = "Country")
+
+GDP_EURO <- GDP_EURO %>%
+  mutate(Country = "Euro") %>%
+  left_join(country_codes, by = "Country")
+
+GDP_JAPAN <- GDP_JAPAN %>%
+  mutate(Country = "Japan") %>%
+  left_join(country_codes, by = "Country")
+
+GDP_UK <- GDP_UK %>%
+  mutate(Country = "UK") %>%
+  left_join(country_codes, by = "Country")
+
+GDP_US <- GDP_US %>%
+  mutate(Country = "US") %>%
+  left_join(country_codes, by = "Country")
+
+# Check the result for one dataset (e.g., GDP_AUSTRALIA)
+head(GDP_AUSTRALIA)
+print(GDP_CANADA)
+
+# Preview the updated datasets
+head(GDP_AUSTRALIA)
+head(GDP_CANADA)
+head(GDP_EURO)
+head(GDP_JAPAN)
+head(GDP_UK)
+head(GDP_US)
+```
+```{r}
+library(dplyr)
+
+# Function to calculate percentage change
+calculate_percentage_change <- function(df, gdp_column) {
+  df %>%
+    arrange(observation_date) %>%  # Ensure data is sorted by date
+    mutate(
+      GDP_PC = ({{ gdp_column }} - lag({{ gdp_column }})) / lag({{ gdp_column }}) 
+    )
+}
+
+# Apply the function to each dataset
+
+# Australia
+GDP_AUSTRALIA <- calculate_percentage_change(GDP_AUSTRALIA, RealGDP)
+
+# Canada
+GDP_CANADA <- calculate_percentage_change(GDP_CANADA, RealGDP)
+
+# Euro
+GDP_EURO <- calculate_percentage_change(GDP_EURO, RealGDP)
+
+# Japan
+GDP_JAPAN <- calculate_percentage_change(GDP_JAPAN, RealGDP)
+
+# UK
+GDP_UK <- calculate_percentage_change(GDP_UK, RealGDP)
+
+# US (Add specific columns for US_GDP and US_GDP_PC)
+GDP_US <- GDP_US %>%
+  arrange(observation_date) %>%
+  mutate(
+    US_GDP = RealGDP_US,  # Create US-specific GDP column
+    US_GDP_PC = (US_GDP - lag(US_GDP)) / lag(US_GDP)   # Calculate percentage change
+  )
+
+# Preview the updated datasets
+head(GDP_AUSTRALIA)
+head(GDP_CANADA)
+head(GDP_EURO)
+head(GDP_JAPAN)
+head(GDP_UK)
+head(GDP_US)
+
+```
+```{r}
+library(dplyr)
+
+# Add Country and Country_ID columns to each dataset
+GDP_AUSTRALIA <- GDP_AUSTRALIA %>%
+  mutate(Country = "Australia", Country_ID = 1)
+
+GDP_CANADA <- GDP_CANADA %>%
+  mutate(Country = "Canada", Country_ID = 2)
+
+GDP_EURO <- GDP_EURO %>%
+  mutate(Country = "Euro", Country_ID = 3)
+
+GDP_JAPAN <- GDP_JAPAN %>%
+  mutate(Country = "Japan", Country_ID = 4)
+
+GDP_UK <- GDP_UK %>%
+  mutate(Country = "UK", Country_ID = 5)
+
+# Combine all country datasets
+combined_gdp <- bind_rows(
+  GDP_AUSTRALIA,
+  GDP_CANADA,
+  GDP_EURO,
+  GDP_JAPAN,
+  GDP_UK
+)
+
+# Add US GDP and US GDP PC to each row without duplication
+combined_gdp <- combined_gdp %>%
+  left_join(
+    GDP_US %>% select(observation_date, US_GDP, US_GDP_PC),
+    by = "observation_date"
+  )
+
+# Calculate the relative difference
+combined_gdp <- combined_gdp %>%
+  mutate(RelativeDiff_GDP = US_GDP_PC - GDP_PC)
+
+# Rearrange columns for clarity
+combined_gdp <- combined_gdp %>%
+  select(observation_date, Country, Country_ID, RealGDP, GDP_PC, US_GDP, US_GDP_PC, RelativeDiff_GDP)
+
+# Remove duplicate rows if any (ensure clean data)
+combined_gdp <- distinct(combined_gdp)
+
+# Preview the combined dataset
+head(combined_gdp)
+
+```
+EDA
+```{r}
+library(ggplot2)
+
+# Create a line graph for ExchangeRate
+ggplot(combined_exchange_data, aes(x = observation_date, y = ExchangeRate
+, color = Country, group = Country)) +
+  geom_line() +
+  labs(title = "Exchange Rate  Over Time by Country",
+       x = "Date",
+       y = "ExchangeRate
+",
+       color = "Country") +
+  theme_minimal()
+
+```
+```{r}
+ggplot(combined_exchange_data, aes(x = observation_date, y = ExchangeRate
+)) +
+  geom_line(color = "blue") +
+  facet_wrap(~ Country, scales = "free_y") +
+  labs(title = "Exchange Rates: USD as the Base Currency",
+       x = "Date",
+       y = "ExchangeRate
+") +
+  theme_minimal()
+```
+```{r}
+library(ggplot2)
+
+# Plot SP500 over time
+ggplot(SP500, aes(x = observation_date, y = SP500
+)) +
+  geom_line(color = "blue") +
+  labs(title = "SP500 Over Time",
+       x = "Date",
+       y = "SP500") +
+  theme_minimal()
+
+
+```
+```{r}
+library(ggplot2)
+
+# Plot VIX over time
+ggplot(VIX, aes(x = observation_date , y = VIXCLS)) +
+  geom_line(color = "purple") +
+  labs(title = "VIX Over Time",
+       x = "Date",
+       y = "VIX") +
+  theme_minimal()
+
+```
+```{r}
+library(ggplot2)
+
+# Plot Crude Oil prices over time
+ggplot(crudeoil, aes(x = observation_date, y = crude_oil)) +
+  geom_line(color = "darkgreen") +
+  labs(title = "Crude Oil Prices Over Time",
+       x = "Date",
+       y = "Crude Oil Price") +
+  theme_minimal()
+
+```
+```{r}
+library(ggplot2)
+
+# Plot unemployment rates with facets for each country
+ggplot(combined_unemployment_data, aes(x = observation_date, y = `Unemployment Rate`)) +
+  geom_line(color = "blue") +
+  facet_wrap(~ Country, scales = "free_y") +
+  labs(
+    title = "Unemployment Rates by Country Over Time",
+    x = "Date",
+    y = "Unemployment Rate"
+  ) +
+  theme_minimal()
+
+```
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# Combine unemployment rate and US unemployment rate into one column
+faceted_unemployment_data <- combined_unemployment_data %>%
+  pivot_longer(cols = c(`Unemployment Rate`, US_UnemploymentRate), 
+               names_to = "Rate_Type", 
+               values_to = "Rate") %>%
+  mutate(Country = ifelse(Rate_Type == "US_UnemploymentRate", "USA", Country))
+
+# Plot faceted graph
+ggplot(faceted_unemployment_data, aes(x = observation_date, y = Rate)) +
+  geom_line(aes(color = Country)) +
+  facet_wrap(~ Country, scales = "free_y") +
+  labs(
+    title = "Unemployment Rates ",
+    x = "Date",
+    y = "Unemployment Rate"
+  ) +
+  theme_minimal()
+
+```
+```{r}
+library(ggplot2)
+
+# Faceted plot for Relative Difference in Unemployment (RelDiffUnemp)
+ggplot(combined_unemployment_data , aes(x = observation_date, y = RelativeDifference_Unemp)) +
+  geom_line(color = "red") +
+  facet_wrap(~ Country, scales = "free_y") +
+  labs(title = "Relative Difference in Unemployment by Country Over Time",
+       x = "Date",
+       y = "Relative Difference in Unemployment") +
+  theme_minimal()
+
+```
+```{r}
+library(ggplot2)
+
+# Plot GoldExport over time
+ggplot(EXPORT, aes(x = observation_date, y = GoldExport)) +
+  geom_line(color = "gold") +
+  labs(title = "Gold Export Over Time",
+       x = "Date",
+       y = "Gold Export") +
+  theme_minimal()
+
+```
+```{r}
+library(ggplot2)
+
+# Plot GoldImport over time
+ggplot(IMPORT, aes(x = observation_date, y = GoldImport)) +
+  geom_line(color = "darkgoldenrod1") +
+  labs(title = "Gold Import Over Time",
+       x = "Date",
+       y = "Gold Import") +
+  theme_minimal()
+
+```
+```{r}
+library(ggplot2)
+
+# Faceted plot for CPI
+ggplot(combined_cpi, aes(x =observation_date, y = CPIPC)) +
+  geom_line(color = "blue") +
+  facet_wrap(~ Country, scales = "free_y") +
+  labs(title = "Consumer Price Index by Country Over Time",
+       x = "Date",
+       y = "CPIPC (Consumer Price Index Percentage Change)") +
+  theme_minimal()
+
+```
+```{r}
+
+library(dplyr)
+library(ggplot2)
+
+# Prepare GDP_US dataset
+GDP_US <- GDP_US %>%
+  rename(RealGDP = US_GDP) %>%  # Rename US_GDP to RealGDP
+  mutate(Country = "USA")       # Add Country column
+
+# Combine GDP datasets
+all_gdp_data <- bind_rows(combined_gdp, GDP_US)
+
+# Faceted plot for Real GDP
+ggplot(all_gdp_data, aes(x = observation_date, y = RealGDP)) +
+  geom_line(color = "purple") +
+  facet_wrap(~ Country, scales = "free_y") +
+  labs(
+    title = "Real GDP by Country Over Time",
+    x = "Date",
+    y = "Real GDP"
+  ) +
+  theme_minimal()
+
+
+```
+```{r}
+library(ggplot2)
+
+# Faceted plot for RelDiffGDP
+ggplot(combined_gdp, aes(x = observation_date, y =RelativeDiff_GDP)) +
+  geom_line(color = "darkred") +
+  facet_wrap(~ Country, scales = "free_y") +
+  labs(title = "Relative Difference in GDP (RelDiffGDP) by Country Over Time",
+       x = "Date",
+       y = "Relative Difference in GDP") +
+  theme_minimal()
+```
+```{r}
+library(dplyr)
+library(lubridate)
+
+# Convert the monthly data to daily frequency
+combined_unemployment_data <- combined_unemployment_data %>%
+  # Ensure observation_date is in Date format
+  mutate(observation_date = as.Date(observation_date)) %>%
+  # Calculate the explicit end date as the last day of December 2023 for each group
+  group_by(Country, Country_ID) %>%
+  mutate(max_date = max(observation_date, as.Date("2023-12-31"))) %>%
+  ungroup() %>%
+  # Create a daily date sequence for each country, extending to 2023-12-31
+  group_by(Country, Country_ID) %>%
+  complete(observation_date = seq.Date(min(observation_date), max(max_date), by = "day")) %>%
+  # Fill the monthly values for all days within each month
+  group_by(Country, Country_ID, YearMonth = floor_date(observation_date, "month")) %>%
+  fill(`Unemployment Rate`, US_UnemploymentRate, PercentageChange_Country, 
+       PercentageChange_US, RelativeDifference_Unemp, .direction = "downup") %>%
+  ungroup() %>%
+  # Remove the temporary columns
+  select(-YearMonth, -max_date)
+
+# Preview the updated dataset
+head(combined_unemployment_data)
+```
+```{r}
+library(dplyr)
+library(lubridate)
+
+# Convert the monthly data to daily frequency for the IMPORT dataset, including December 2023
+IMPORT <- IMPORT %>%
+  # Ensure observation_date is in Date format
+  mutate(observation_date = as.Date(observation_date)) %>%
+  # Ensure the end date is at least December 31, 2023
+  mutate(max_date = max(observation_date, as.Date("2023-12-31"))) %>%
+  # Create a daily date sequence
+  complete(observation_date = seq.Date(min(observation_date), max(max_date), by = "day")) %>%
+  # Fill the monthly values for all days within each month
+  group_by(YearMonth = floor_date(observation_date, "month")) %>%
+  fill(GoldImport, GoldImportPC, .direction = "downup") %>%
+  ungroup() %>%
+  # Remove the temporary YearMonth and max_date columns
+  select(-YearMonth, -max_date)
+
+# Preview the updated dataset
+head(IMPORT)
+```
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+# Convert the monthly data to daily frequency for the EXPORT dataset, including December 2023
+EXPORT <- EXPORT %>%
+  # Ensure observation_date is in Date format
+  mutate(observation_date = as.Date(observation_date)) %>%
+  # Ensure the end date is at least December 31, 2023
+  mutate(max_date = max(observation_date, as.Date("2023-12-31"))) %>%
+  # Create a daily date sequence
+  complete(observation_date = seq.Date(min(observation_date), max(max_date), by = "day")) %>%
+  # Fill the monthly values for all days within each month
+  group_by(YearMonth = floor_date(observation_date, "month")) %>%
+  fill(GoldExport, GoldExportPC, .direction = "downup") %>%
+  ungroup() %>%
+  # Remove the temporary YearMonth and max_date columns
+  select(-YearMonth, -max_date)
+
+# Preview the updated dataset
+head(EXPORT)
+
+```
+```{r}
+library(dplyr)
+library(lubridate)
+
+# Convert combined_cpi to daily data, ensuring December 2023 is included
+combined_cpi <- combined_cpi %>%
+  # Ensure observation_date is in Date format
+  mutate(observation_date = as.Date(observation_date)) %>%
+  # Calculate the explicit end date as the last day of December 2023 for each group
+  group_by(Country, Country_ID) %>%
+  mutate(max_date = max(observation_date, as.Date("2023-12-31"))) %>%
+  ungroup() %>%
+  # Create a daily date sequence for each country, extending to 2023-12-31
+  group_by(Country, Country_ID) %>%
+  complete(observation_date = seq.Date(min(observation_date), max(max_date), by = "day")) %>%
+  # Fill the monthly values for all days within each month
+  group_by(Country, Country_ID, YearMonth = floor_date(observation_date, "month")) %>%
+  fill(CPI, CPIPC, US_CPI, US_CPI_PC, RelativeDiff_CPI, .direction = "downup") %>%
+  ungroup() %>%
+  # Remove the temporary columns
+  select(-YearMonth, -max_date)
+
+# Preview the updated dataset
+head(combined_cpi)
+
+
+```
+```{r}
+library(dplyr)
+library(lubridate)
+
+# Convert the monthly data to daily frequency for combined_gdp
+combined_gdp <- combined_gdp %>%
+  # Ensure observation_date is in Date format
+  mutate(observation_date = as.Date(observation_date)) %>%
+  # Calculate the explicit end date as the last day of December 2023 for each group
+  group_by(Country, Country_ID) %>%
+  mutate(max_date = max(observation_date, as.Date("2023-12-31"))) %>%
+  ungroup() %>%
+  # Create a daily date sequence for each country, extending to 2023-12-31
+  group_by(Country, Country_ID) %>%
+  complete(observation_date = seq.Date(min(observation_date), max(max_date), by = "day")) %>%
+  # Fill the monthly values for all days within each month
+  group_by(Country, Country_ID, YearMonth = floor_date(observation_date, "month")) %>%
+  fill(RealGDP, GDP_PC, US_GDP, US_GDP_PC, RelativeDiff_GDP, .direction = "downup") %>%
+  ungroup() %>%
+  # Remove the temporary columns
+  select(-YearMonth, -max_date)
+
+# Preview the updated dataset
+head(combined_gdp)
+
+
+```
+```{r}
+# Start with the base dataset
+final_dataset <- combined_exchange_data
+
+# Preview the structure of the base dataset
+str(final_dataset)
+```
+```{r}
+library(dplyr)
+library(lubridate)
+
+# Ensure observation_date is in Date format for both datasets
+final_dataset <- final_dataset %>%
+  mutate(observation_date = as.Date(observation_date))
+
+SP500 <- SP500 %>%
+  mutate(observation_date = as.Date(observation_date))
+
+# Merge SP500 data with combined_exchange_data
+final_dataset <- final_dataset %>%
+  left_join(SP500, by = "observation_date")
+
+# Preview the structure of the updated final dataset
+str(final_dataset)
+
+```
+```{r}
+# Ensure observation_date is in Date format for both datasets
+final_dataset <- final_dataset %>%
+  mutate(observation_date = as.Date(observation_date))
+
+VIX <- VIX %>%
+  mutate(observation_date = as.Date(observation_date))
+
+# Merge VIX data with the final_dataset
+final_dataset <- final_dataset %>%
+  left_join(VIX, by = "observation_date")
+
+# Preview the structure of the updated final dataset
+str(final_dataset)
+```
+```{r}
+# Ensure observation_date is in Date format for both datasets
+final_dataset <- final_dataset %>%
+  mutate(observation_date = as.Date(observation_date))
+
+crudeoil <- crudeoil %>%
+  mutate(observation_date = as.Date(observation_date))
+
+# Merge crudeoil data with the final_dataset
+final_dataset <- final_dataset %>%
+  left_join(crudeoil, by = "observation_date")
+
+# Preview the structure of the updated final dataset
+str(final_dataset)
+
+```
+```{r}
+# Ensure observation_date is in Date format for both datasets
+final_dataset <- final_dataset %>%
+  mutate(observation_date = as.Date(observation_date))
+
+combined_unemployment_data <- combined_unemployment_data %>%
+  mutate(observation_date = as.Date(observation_date))
+
+# Merge combined_unemployment_data with final_dataset
+final_dataset <- final_dataset %>%
+  left_join(combined_unemployment_data, by = c("observation_date", "Country", "Country_ID"))
+
+# Preview the structure of the updated final dataset
+str(final_dataset)
+
+```
+```{r}
+# Ensure observation_date is in Date format for both datasets
+final_dataset <- final_dataset %>%
+  mutate(observation_date = as.Date(observation_date))
+
+IMPORT <- IMPORT %>%
+  mutate(observation_date = as.Date(observation_date))
+
+# Merge IMPORT data with final_dataset
+final_dataset <- final_dataset %>%
+  left_join(IMPORT, by = "observation_date")
+
+# Preview the structure of the updated final dataset
+str(final_dataset)
+
+```
+```{r}
+# Ensure observation_date is in Date format for both datasets
+final_dataset <- final_dataset %>%
+  mutate(observation_date = as.Date(observation_date))
+
+EXPORT <- EXPORT %>%
+  mutate(observation_date = as.Date(observation_date))
+
+# Merge EXPORT data with final_dataset
+final_dataset <- final_dataset %>%
+  left_join(EXPORT, by = "observation_date")
+
+# Preview the structure of the updated final dataset
+str(final_dataset)
+
+```
+```{r}
+# Ensure observation_date is in Date format for both datasets
+final_dataset <- final_dataset %>%
+  mutate(observation_date = as.Date(observation_date))
+
+combined_cpi <- combined_cpi %>%
+  mutate(observation_date = as.Date(observation_date))
+
+# Merge combined_cpi with final_dataset
+final_dataset <- final_dataset %>%
+  left_join(combined_cpi, by = c("observation_date", "Country", "Country_ID"))
+
+# Preview the structure of the updated final dataset
+str(final_dataset)
+
+```
+```{r}
+# Ensure observation_date is in Date format for both datasets
+final_dataset <- final_dataset %>%
+  mutate(observation_date = as.Date(observation_date))
+
+combined_gdp <- combined_gdp %>%
+  mutate(observation_date = as.Date(observation_date))
+
+# Merge combined_gdp with final_dataset
+final_dataset <- final_dataset %>%
+  left_join(combined_gdp, by = c("observation_date", "Country", "Country_ID"))
+
+# Preview the structure of the updated final dataset
+str(final_dataset)
+
+```
+```{r}
+final_dataset <- final_dataset %>%
+  rename(
+    Date = observation_date,
+    Unemp_PC = `PercentageChange_Country`,
+    US_Unemp_PC = `PercentageChange_US`)
+```
+
+```{r}
+colnames(final_dataset)
+```
+```{r}
+# Reorder and rename the columns
+final_dataset <- final_dataset %>%
+  select(
+    Date = Date,
+    Country = Country,
+    Country_ID = Country_ID,
+    ExchangeRate = ExchangeRate,
+    SP500 = SP500,
+    VIX = VIXCLS,
+    CrudeOil = crude_oil,
+    UnemploymentRate = `Unemployment Rate`,
+    USUnemploymentRate = US_UnemploymentRate,
+    GoldImport = GoldImport,
+    GoldExport = GoldExport,
+    CPI = CPI,
+    USCPI = US_CPI,
+    RealGDP = RealGDP,
+    USGDP = US_GDP,
+    ERPC = ERPC,
+    SP500PC = SP500PC,
+    VIXPC = VIXPC,
+    CrudeOilPC = crudeoilPC,
+    UnempPC = Unemp_PC,
+    USUnempPC = US_Unemp_PC,
+    RelDiffUnemp = RelativeDifference_Unemp,
+    GoldImportPC = GoldImportPC,
+    GoldExportPC = GoldExportPC,
+    CPIPC = CPIPC,
+    USCPIPC = US_CPI_PC,
+    RelDiffCPI = RelativeDiff_CPI,
+    GDPPC = GDP_PC,
+    USGDPC = US_GDP_PC,
+    RelDiffGDP = RelativeDiff_GDP
+  )
+
+# Preview the updated dataset
+head(final_dataset)
+
+```
+```{r}
+# Ensure the `date` column is in Date format
+final_dataset <- final_dataset %>%
+  mutate(Date = as.Date(Date))
+
+# Filter the dataset for the date range 01/01/2013 to 12/31/2023
+final_dataset <- final_dataset %>%
+  filter(Date >= as.Date("2013-01-01") & Date <= as.Date("2023-12-31"))
+
+# Preview the filtered dataset
+str(final_dataset)
+
+
+```
+```{r}
+# Remove rows where ExchangeRate is 0
+final_dataset <- final_dataset %>%
+  filter(ExchangeRate != 0)
+
+# Preview the updated dataset
+head(final_dataset)
+
+# Check if any rows with ExchangeRate == 0 remain
+sum(final_dataset$ExchangeRate == 0)
+
+```
+```{r}
+
+library(dplyr)
+
+# Remove rows where any column has Inf or -Inf
+final_dataset <- final_dataset %>%
+  filter(!if_any(everything(), ~ is.infinite(.)))
+
+# Preview the cleaned dataset
+head(final_dataset)
+
+# Check if any Inf values remain
+sum(is.infinite(as.matrix(final_dataset)))
+
+```
+```{r}
+library(dplyr)
+
+# Add the covid_dummy variable
+final_dataset <- final_dataset %>%
+  mutate(covid_dummy = ifelse(Date >= as.Date("2019-03-13") & 
+                              Date <= as.Date("2022-05-31"), 1, 0))
+
+# Preview the updated dataset
+head(final_dataset)
+
+```
+```{r}
+# Load necessary libraries
+library(ggcorrplot)
+
+# Select relevant columns
+columns <- c(
+  "ExchangeRate", "SP500", "VIX", "CrudeOil", "UnemploymentRate", "USUnemploymentRate",
+  "GoldImport", "GoldExport", "CPI", "USCPI", "RealGDP", "USGDP"
+)
+
+# Subset the data to include only the relevant columns
+data_subset <- final_dataset[, columns]
+
+# Calculate the correlation matrix
+correlation_matrix <- cor(data_subset, use = "complete.obs")
+
+# Round the correlation matrix to one decimal place
+correlation_matrix_rounded <- round(correlation_matrix, 1)
+
+# Plot the correlation heatmap with dark green and beige palette
+ggcorrplot(correlation_matrix_rounded, 
+           method = "square",  # Use square tiles for a clean look
+           type = "lower", 
+           lab = TRUE, 
+           lab_size = 4,  # Increase label size for readability
+           lab_col = "black",  # Set label color to black for better contrast
+           colors = c("darkgreen", "beige", "darkred"),  # Custom dark green to beige gradient
+           title = "Correlation Map for Selected Variables", 
+           ggtheme = theme_minimal(base_size = 12) +  # Larger base size for better readability
+                     theme(
+                       plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),  # Centered, bold title
+                       axis.text = element_text(size = 10, color = "black"),  # Adjust axis text size and color
+                       axis.title = element_blank()  # Remove axis titles
+                     ))
+
+
+```
+```{r}
+# Load required libraries
+library(dplyr)
+library(broom)  # For tidy regression summaries
+library(purrr)  # For the map() function
+
+# Perform regression for each country
+results_by_country <- final_dataset %>%
+  group_by(Country) %>%
+  nest() %>%
+  mutate(
+    regression_model = map(data, ~ lm(ExchangeRate ~ ., data = .x %>% select(-Date, -Country_ID))),
+    regression_summary = map(regression_model, ~ tidy(.))
+  )
+
+# Extract and display results
+results_by_country <- results_by_country %>%
+  select(Country, regression_summary)
+
+# Print regression summaries for each country
+print("Regression Summaries by Country:")
+results_by_country$regression_summary
+
+```
+
+```{r}
+options(warn = -1)
+
+library(dplyr)
+library(ggplot2)
+library(Metrics)  # For RMSE calculation
+
+# Define the rolling prediction function
+rolling_prediction_lag <- function(data, lag, window_size = 29) {
+  data <- data %>% mutate(Predicted_ExchangeRate = NA)  # Initialize a column for predictions
+  
+  # Track residuals for RMSE calculation
+  residuals <- numeric()
+  
+  # Flag to ensure the regression summary is printed only once per lag
+  summary_printed <- FALSE
+  
+  # Loop through the dataset to predict the next day
+  for (i in seq(window_size + 1, nrow(data))) {
+    # Training data: Previous `window_size` days
+    train_data <- data[(i - window_size):(i - 1), ]
+    
+    # Test data: Current day (the day we want to predict)
+    test_data <- data[i, , drop = FALSE]
+    
+    # Ensure there are no missing values in the training data
+    lag_columns <- c(
+      paste0("VIX_lag", lag),
+      paste0("CrudeOil_lag", lag),
+      paste0("SP500_lag", lag)
+    )
+    if (all(!is.na(train_data[["ExchangeRate"]])) &&
+        all(!is.na(train_data[lag_columns]))) {
+      
+      # Train a linear regression model using the specified lag and other variables
+      model <- lm(
+        as.formula(paste("ExchangeRate ~", 
+                         paste(lag_columns, collapse = " + "), 
+                         "+ RelDiffCPI ")), 
+        data = train_data
+      )
+      
+      # Print the summary of the regression model once
+      if (!summary_printed) {
+        cat("\n--- Regression Summary for Lag", lag, "---\n")
+        print(summary(model))
+        summary_printed <- TRUE
+      }
+      
+      # Predict ExchangeRate for the current day
+      prediction <- predict(model, newdata = test_data)
+      
+      # Add the prediction to the dataset
+      data$Predicted_ExchangeRate[i] <- prediction
+      
+      # Calculate residual and store it
+      residuals <- c(residuals, test_data$ExchangeRate - prediction)
+    }
+  }
+  
+  # Calculate RMSE and print it
+  rmse_value <- rmse(data$ExchangeRate[!is.na(data$Predicted_ExchangeRate)], 
+                     data$Predicted_ExchangeRate[!is.na(data$Predicted_ExchangeRate)])
+  cat("\n--- RMSE for Lag", lag, ": ", rmse_value, "---\n")
+  
+  return(data)
+}
+
+# Define a function to process and generate predictions for each country
+process_country_data <- function(data, country_name, window_size = 29) {
+  cat("\n--- Processing Country:", country_name, "---\n")
+  
+  # Filter the dataset for the specific country
+  country_data <- data %>%
+    filter(Country == country_name) %>%
+    select(Country, Country_ID, Date, VIX, ExchangeRate, CrudeOil, SP500, RelDiffCPI) %>%
+    arrange(Date) %>%
+    group_by(Country) %>%
+    mutate(
+      VIX_lag1 = lag(VIX, 1),
+      VIX_lag2 = lag(VIX, 2),
+      VIX_lag3 = lag(VIX, 3),
+      VIX_lag4 = lag(VIX, 4),
+      VIX_lag5 = lag(VIX, 5),
+      CrudeOil_lag1 = lag(CrudeOil, 1),
+      CrudeOil_lag2 = lag(CrudeOil, 2),
+      CrudeOil_lag3 = lag(CrudeOil, 3),
+      CrudeOil_lag4 = lag(CrudeOil, 4),
+      CrudeOil_lag5 = lag(CrudeOil, 5),
+      SP500_lag1 = lag(SP500, 1),
+      SP500_lag2 = lag(SP500, 2),
+      SP500_lag3 = lag(SP500, 3),
+      SP500_lag4 = lag(SP500, 4),
+      SP500_lag5 = lag(SP500, 5)
+    ) %>%
+    ungroup()
+  
+  # Initialize the final dataset for predictions
+  final_country_data <- country_data
+  
+  # Apply rolling prediction for each lag
+  for (lag in 1:5) {
+    predictions <- rolling_prediction_lag(country_data, lag, window_size)
+    final_country_data <- final_country_data %>%
+      left_join(predictions %>% select(Date, Predicted_ExchangeRate) %>% 
+                  rename(!!paste0("Predicted_ExchangeRate_Lag", lag) := Predicted_ExchangeRate), by = "Date")
+  }
+  
+  # Save graphs for each lag
+  for (lag in 1:5) {
+    results_filtered <- final_country_data %>%
+      select(Date, ExchangeRate, !!sym(paste0("Predicted_ExchangeRate_Lag", lag))) %>%
+      rename(Predicted_ExchangeRate = !!paste0("Predicted_ExchangeRate_Lag", lag)) %>%
+      filter(!is.na(Predicted_ExchangeRate))
+    
+    # Plot actual vs predicted exchange rates
+    plot <- ggplot(results_filtered, aes(x = Date)) +
+      geom_line(aes(y = ExchangeRate, color = "Actual")) +
+      geom_line(aes(y = Predicted_ExchangeRate, color = "Predicted")) +
+      labs(
+        title = paste("Rolling Window Exchange Rate Prediction for", country_name, "(Lag", lag, ")"),
+        x = "Date",
+        y = "Exchange Rate",
+        color = "Legend"
+      ) +
+      theme_minimal()
+    
+    # Save the plot as a PNG file
+    ggsave(filename = paste0(country_name, "_ExchangeRate_Lag", lag, ".png"), plot = plot, width = 10, height = 6)
+  }
+  
+  # Save the final dataset to a CSV file
+  write.csv(final_country_data, paste0("Final_Predicted_ExchangeRate_", country_name, ".csv"), row.names = FALSE)
+  
+  return(final_country_data)
+}
+
+# Process data for all countries
+unique_countries <- unique(final_dataset$Country)
+all_countries_results <- list()
+
+for (country in unique_countries) {
+  all_countries_results[[country]] <- process_country_data(final_dataset, country)
+}
+
+# Access results for a specific country
+# Example: Access results for "Australia"
+print(all_countries_results[["Australia"]])
+
+```
+```{r}
+options(warn = -1)
+
+library(dplyr)
+library(ggplot2)
+library(Metrics)  # For RMSE calculation
+
+# Define the rolling prediction function
+rolling_prediction_lag <- function(data, lag, window_size = 29) {
+  data <- data %>% mutate(Predicted_ExchangeRate = NA)  # Initialize a column for predictions
+  
+  # Track residuals for RMSE calculation
+  residuals <- numeric()
+  
+  # Flag to ensure the regression summary is printed only once per lag
+  summary_printed <- FALSE
+  
+  # Loop through the dataset to predict the next day
+  for (i in seq(window_size + 1, nrow(data))) {
+    # Training data: Previous `window_size` days
+    train_data <- data[(i - window_size):(i - 1), ]
+    
+    # Test data: Current day (the day we want to predict)
+    test_data <- data[i, , drop = FALSE]
+    
+    # Ensure there are no missing values in the training data
+    lag_columns <- c(
+      paste0("VIX_lag", lag),
+      paste0("CrudeOil_lag", lag),
+      paste0("SP500_lag", lag)
+    )
+    if (all(!is.na(train_data[["ExchangeRate"]])) &&
+        all(!is.na(train_data[lag_columns]))) {
+      
+      # Train a linear regression model using the specified lag and other variables
+      model <- lm(
+        as.formula(paste("ExchangeRate ~", 
+                         paste(lag_columns, collapse = " + "), 
+                         "+ RelDiffUnemp ")), 
+        data = train_data
+      )
+      
+      # Print the summary of the regression model once
+      if (!summary_printed) {
+        cat("\n--- Regression Summary for Lag", lag, "---\n")
+        print(summary(model))
+        summary_printed <- TRUE
+      }
+      
+      # Predict ExchangeRate for the current day
+      prediction <- predict(model, newdata = test_data)
+      
+      # Add the prediction to the dataset
+      data$Predicted_ExchangeRate[i] <- prediction
+      
+      # Calculate residual and store it
+      residuals <- c(residuals, test_data$ExchangeRate - prediction)
+    }
+  }
+  
+  # Calculate RMSE and print it
+  rmse_value <- rmse(data$ExchangeRate[!is.na(data$Predicted_ExchangeRate)], 
+                     data$Predicted_ExchangeRate[!is.na(data$Predicted_ExchangeRate)])
+  cat("\n--- RMSE for Lag", lag, ": ", rmse_value, "---\n")
+  
+  return(data)
+}
+
+# Define a function to process and generate predictions for each country
+process_country_data <- function(data, country_name, window_size = 29) {
+  cat("\n--- Processing Country:", country_name, "---\n")
+  
+  # Filter the dataset for the specific country
+  country_data <- data %>%
+    filter(Country == country_name) %>%
+    select(Country, Country_ID, Date, VIX, ExchangeRate, CrudeOil, SP500, RelDiffUnemp) %>%
+    arrange(Date) %>%
+    group_by(Country) %>%
+    mutate(
+      VIX_lag1 = lag(VIX, 1),
+      VIX_lag2 = lag(VIX, 2),
+      VIX_lag3 = lag(VIX, 3),
+      VIX_lag4 = lag(VIX, 4),
+      VIX_lag5 = lag(VIX, 5),
+      CrudeOil_lag1 = lag(CrudeOil, 1),
+      CrudeOil_lag2 = lag(CrudeOil, 2),
+      CrudeOil_lag3 = lag(CrudeOil, 3),
+      CrudeOil_lag4 = lag(CrudeOil, 4),
+      CrudeOil_lag5 = lag(CrudeOil, 5),
+      SP500_lag1 = lag(SP500, 1),
+      SP500_lag2 = lag(SP500, 2),
+      SP500_lag3 = lag(SP500, 3),
+      SP500_lag4 = lag(SP500, 4),
+      SP500_lag5 = lag(SP500, 5)
+    ) %>%
+    ungroup()
+  
+  # Initialize the final dataset for predictions
+  final_country_data <- country_data
+  
+  # Apply rolling prediction for each lag
+  for (lag in 1:5) {
+    predictions <- rolling_prediction_lag(country_data, lag, window_size)
+    final_country_data <- final_country_data %>%
+      left_join(predictions %>% select(Date, Predicted_ExchangeRate) %>% 
+                  rename(!!paste0("Predicted_ExchangeRate_Lag", lag) := Predicted_ExchangeRate), by = "Date")
+  }
+  
+  # Save graphs for each lag
+  for (lag in 1:5) {
+    results_filtered <- final_country_data %>%
+      select(Date, ExchangeRate, !!sym(paste0("Predicted_ExchangeRate_Lag", lag))) %>%
+      rename(Predicted_ExchangeRate = !!paste0("Predicted_ExchangeRate_Lag", lag)) %>%
+      filter(!is.na(Predicted_ExchangeRate))
+    
+    # Plot actual vs predicted exchange rates
+    plot <- ggplot(results_filtered, aes(x = Date)) +
+      geom_line(aes(y = ExchangeRate, color = "Actual")) +
+      geom_line(aes(y = Predicted_ExchangeRate, color = "Predicted")) +
+      labs(
+        title = paste("Rolling Window Exchange Rate Prediction for", country_name, "(Lag", lag, ")"),
+        x = "Date",
+        y = "Exchange Rate",
+        color = "Legend"
+      ) +
+      theme_minimal()
+    
+    # Save the plot as a PNG file
+    ggsave(filename = paste0(country_name, "_ExchangeRate_Lag2", lag, ".png"), plot = plot, width = 10, height = 6)
+  }
+  
+  # Save the final dataset to a CSV file
+  write.csv(final_country_data, paste0("Final_Predicted_ExchangeRate_2", country_name, ".csv"), row.names = FALSE)
+  
+  return(final_country_data)
+}
+
+# Process data for all countries
+unique_countries <- unique(final_dataset$Country)
+all_countries_results <- list()
+
+for (country in unique_countries) {
+  all_countries_results[[country]] <- process_country_data(final_dataset, country)
+}
+
+# Access results for a specific country
+# Example: Access results for "Australia"
+print(all_countries_results[["Australia"]])
+```
+```{r}
+options(warn = -1)
+
+library(dplyr)
+library(ggplot2)
+library(Metrics)  # For RMSE calculation
+
+# Define the rolling prediction function
+rolling_prediction_lag <- function(data, lag, window_size = 29) {
+  data <- data %>% mutate(Predicted_ExchangeRate = NA)  # Initialize a column for predictions
+  
+  # Track residuals for RMSE calculation
+  residuals <- numeric()
+  
+  # Flag to ensure the regression summary is printed only once per lag
+  summary_printed <- FALSE
+  
+  # Loop through the dataset to predict the next day
+  for (i in seq(window_size + 1, nrow(data))) {
+    # Training data: Previous `window_size` days
+    train_data <- data[(i - window_size):(i - 1), ]
+    
+    # Test data: Current day (the day we want to predict)
+    test_data <- data[i, , drop = FALSE]
+    
+    # Ensure there are no missing values in the training data
+    lag_columns <- c(
+      paste0("VIX_lag", lag),
+      paste0("CrudeOil_lag", lag),
+      paste0("SP500_lag", lag)
+    )
+    if (all(!is.na(train_data[["ExchangeRate"]])) &&
+        all(!is.na(train_data[lag_columns]))) {
+      
+      # Train a linear regression model using the specified lag and other variables
+      model <- lm(
+        as.formula(paste("ExchangeRate ~", 
+                         paste(lag_columns, collapse = " + "), 
+                         "+ RelDiffGDP ")), 
+        data = train_data
+      )
+      
+      # Print the summary of the regression model once
+      if (!summary_printed) {
+        cat("\n--- Regression Summary for Lag", lag, "---\n")
+        print(summary(model))
+        summary_printed <- TRUE
+      }
+      
+      # Predict ExchangeRate for the current day
+      prediction <- predict(model, newdata = test_data)
+      
+      # Add the prediction to the dataset
+      data$Predicted_ExchangeRate[i] <- prediction
+      
+      # Calculate residual and store it
+      residuals <- c(residuals, test_data$ExchangeRate - prediction)
+    }
+  }
+  
+  # Calculate RMSE and print it
+  rmse_value <- rmse(data$ExchangeRate[!is.na(data$Predicted_ExchangeRate)], 
+                     data$Predicted_ExchangeRate[!is.na(data$Predicted_ExchangeRate)])
+  cat("\n--- RMSE for Lag", lag, ": ", rmse_value, "---\n")
+  
+  return(data)
+}
+
+# Define a function to process and generate predictions for each country
+process_country_data <- function(data, country_name, window_size = 29) {
+  cat("\n--- Processing Country:", country_name, "---\n")
+  
+  # Filter the dataset for the specific country
+  country_data <- data %>%
+    filter(Country == country_name) %>%
+    select(Country, Country_ID, Date, VIX, ExchangeRate, CrudeOil, SP500, RelDiffGDP) %>%
+    arrange(Date) %>%
+    group_by(Country) %>%
+    mutate(
+      VIX_lag1 = lag(VIX, 1),
+      VIX_lag2 = lag(VIX, 2),
+      VIX_lag3 = lag(VIX, 3),
+      VIX_lag4 = lag(VIX, 4),
+      VIX_lag5 = lag(VIX, 5),
+      CrudeOil_lag1 = lag(CrudeOil, 1),
+      CrudeOil_lag2 = lag(CrudeOil, 2),
+      CrudeOil_lag3 = lag(CrudeOil, 3),
+      CrudeOil_lag4 = lag(CrudeOil, 4),
+      CrudeOil_lag5 = lag(CrudeOil, 5),
+      SP500_lag1 = lag(SP500, 1),
+      SP500_lag2 = lag(SP500, 2),
+      SP500_lag3 = lag(SP500, 3),
+      SP500_lag4 = lag(SP500, 4),
+      SP500_lag5 = lag(SP500, 5)
+    ) %>%
+    ungroup()
+  
+  # Initialize the final dataset for predictions
+  final_country_data <- country_data
+  
+  # Apply rolling prediction for each lag
+  for (lag in 1:5) {
+    predictions <- rolling_prediction_lag(country_data, lag, window_size)
+    final_country_data <- final_country_data %>%
+      left_join(predictions %>% select(Date, Predicted_ExchangeRate) %>% 
+                  rename(!!paste0("Predicted_ExchangeRate_Lag", lag) := Predicted_ExchangeRate), by = "Date")
+  }
+  
+  # Save graphs for each lag
+  for (lag in 1:5) {
+    results_filtered <- final_country_data %>%
+      select(Date, ExchangeRate, !!sym(paste0("Predicted_ExchangeRate_Lag", lag))) %>%
+      rename(Predicted_ExchangeRate = !!paste0("Predicted_ExchangeRate_Lag", lag)) %>%
+      filter(!is.na(Predicted_ExchangeRate))
+    
+    # Plot actual vs predicted exchange rates
+    plot <- ggplot(results_filtered, aes(x = Date)) +
+      geom_line(aes(y = ExchangeRate, color = "Actual")) +
+      geom_line(aes(y = Predicted_ExchangeRate, color = "Predicted")) +
+      labs(
+        title = paste("Rolling Window Exchange Rate Prediction for", country_name, "(Lag", lag, ")"),
+        x = "Date",
+        y = "Exchange Rate",
+        color = "Legend"
+      ) +
+      theme_minimal()
+    
+    # Save the plot as a PNG file
+    ggsave(filename = paste0(country_name, "_ExchangeRate_Lag3", lag, ".png"), plot = plot, width = 10, height = 6)
+  }
+  
+  # Save the final dataset to a CSV file
+  write.csv(final_country_data, paste0("Final_Predicted_ExchangeRate_3", country_name, ".csv"), row.names = FALSE)
+  
+  return(final_country_data)
+}
+
+# Process data for all countries
+unique_countries <- unique(final_dataset$Country)
+all_countries_results <- list()
+
+for (country in unique_countries) {
+  all_countries_results[[country]] <- process_country_data(final_dataset, country)
+}
+
+# Access results for a specific country
+# Example: Access results for "Australia"
+print(all_countries_results[["Australia"]])
+```
+```{r}
+# Load required libraries
+library(dplyr)
+library(plm)
+
+# Correct lag calculation
+data_with_lags <- final_dataset %>%
+  group_by(Country) %>%  # Ensure lags are calculated within each country
+  mutate(
+    VIX_lag1 = dplyr::lag(VIX, 1), VIX_lag2 = dplyr::lag(VIX, 2), 
+    VIX_lag3 = dplyr::lag(VIX, 3), VIX_lag4 = dplyr::lag(VIX, 4), 
+    VIX_lag5 = dplyr::lag(VIX, 5),
+    SP500_lag1 = dplyr::lag(SP500, 1), SP500_lag2 = dplyr::lag(SP500, 2), 
+    SP500_lag3 = dplyr::lag(SP500, 3), SP500_lag4 = dplyr::lag(SP500, 4), 
+    SP500_lag5 = dplyr::lag(SP500, 5),
+    CrudeOil_lag1 = dplyr::lag(CrudeOil, 1), CrudeOil_lag2 = dplyr::lag(CrudeOil, 2), 
+    CrudeOil_lag3 = dplyr::lag(CrudeOil, 3), CrudeOil_lag4 = dplyr::lag(CrudeOil, 4), 
+    CrudeOil_lag5 = dplyr::lag(CrudeOil, 5)
+  ) %>%
+  ungroup()  # Ungroup after lag calculation
+
+# Drop rows with missing values due to lags
+data_with_lags <- na.omit(data_with_lags)
+
+# Convert to pdata.frame for panel data analysis
+pdata <- pdata.frame(data_with_lags, index = c("Country", "Date"))
+
+# Function to run a model for a specific lag
+run_model <- function(lag_num) {
+  # Variable names for the specified lag
+  vix_var <- paste0("VIX_lag", lag_num)
+  sp500_var <- paste0("SP500_lag", lag_num)
+  crudeoil_var <- paste0("CrudeOil_lag", lag_num)
+  
+  predictions <- c()  # Vector to store predictions
+  true_values <- c()  # Vector to store true values
+  dates <- c()        # Vector to store predicted dates
+  
+  # Flag to print the regression summary only once per lag
+  summary_printed <- FALSE
+  
+  # Rolling window
+  for (i in 1:(nrow(pdata) - 30)) {
+    # Define training and testing windows
+    train_window <- pdata[i:(i + 28), ]
+    test_window <- pdata[i + 29, , drop = FALSE]  # Single-row test window
+    
+    # Fit the plm model
+    model <- plm(
+      as.formula(paste("ExchangeRate ~", vix_var, "+", sp500_var, "+", crudeoil_var, "+ RelDiffCPI ")),
+      data = train_window,
+      model = "within"
+    )
+    
+    # Print the regression summary once
+    if (!summary_printed) {
+      cat("\n--- Regression Summary for Lag", lag_num, "---\n")
+      print(summary(model))
+      summary_printed <- TRUE
+    }
+    
+    # Manual prediction
+    prediction <- sum(coef(model) * as.numeric(test_window[ , names(coef(model)), drop = TRUE]))
+    
+    # Save prediction and true value
+    predictions <- c(predictions, prediction)
+    true_values <- c(true_values, as.numeric(test_window$ExchangeRate))
+    dates <- c(dates, as.character(test_window$Date))
+  }
+  
+  # Combine results into a data frame
+  results <- data.frame(
+    Date = as.Date(dates),
+    Predicted = predictions,
+    Actual = true_values
+  )
+  
+  # Calculate RMSE
+  rmse <- sqrt(mean((results$Predicted - results$Actual)^2, na.rm = TRUE))
+  
+  return(list(results = results, rmse = rmse))
+}
+
+# Run models for each lag and store results
+results_list <- list()
+for (lag in 1:5) {
+  model_results <- run_model(lag)
+  results_list[[paste0("Model_Lag", lag)]] <- model_results
+}
+
+# Step 5: Display RMSE for each model
+for (lag in 1:5) {
+  print(paste("RMSE for Model with Lag", lag, ":", results_list[[paste0("Model_Lag", lag)]]$rmse))
+}
+
+```
+
+```{r}
+# Load required libraries
+library(dplyr)
+library(plm)
+
+# Correct lag calculation
+data_with_lags <- final_dataset %>%
+  group_by(Country) %>%  # Ensure lags are calculated within each country
+  mutate(
+    VIX_lag1 = dplyr::lag(VIX, 1), VIX_lag2 = dplyr::lag(VIX, 2), 
+    VIX_lag3 = dplyr::lag(VIX, 3), VIX_lag4 = dplyr::lag(VIX, 4), 
+    VIX_lag5 = dplyr::lag(VIX, 5),
+    SP500_lag1 = dplyr::lag(SP500, 1), SP500_lag2 = dplyr::lag(SP500, 2), 
+    SP500_lag3 = dplyr::lag(SP500, 3), SP500_lag4 = dplyr::lag(SP500, 4), 
+    SP500_lag5 = dplyr::lag(SP500, 5),
+    CrudeOil_lag1 = dplyr::lag(CrudeOil, 1), CrudeOil_lag2 = dplyr::lag(CrudeOil, 2), 
+    CrudeOil_lag3 = dplyr::lag(CrudeOil, 3), CrudeOil_lag4 = dplyr::lag(CrudeOil, 4), 
+    CrudeOil_lag5 = dplyr::lag(CrudeOil, 5)
+  ) %>%
+  ungroup()  # Ungroup after lag calculation
+
+# Drop rows with missing values due to lags
+data_with_lags <- na.omit(data_with_lags)
+
+# Convert to pdata.frame for panel data analysis
+pdata <- pdata.frame(data_with_lags, index = c("Country", "Date"))
+
+# Function to run a model for a specific lag
+run_model <- function(lag_num) {
+  # Variable names for the specified lag
+  vix_var <- paste0("VIX_lag", lag_num)
+  sp500_var <- paste0("SP500_lag", lag_num)
+  crudeoil_var <- paste0("CrudeOil_lag", lag_num)
+  
+  predictions <- c()  # Vector to store predictions
+  true_values <- c()  # Vector to store true values
+  dates <- c()        # Vector to store predicted dates
+  
+  # Flag to print the regression summary only once per lag
+  summary_printed <- FALSE
+  
+  # Rolling window
+  for (i in 1:(nrow(pdata) - 30)) {
+    # Define training and testing windows
+    train_window <- pdata[i:(i + 28), ]
+    test_window <- pdata[i + 29, , drop = FALSE]  # Single-row test window
+    
+    # Fit the plm model
+    model <- plm(
+      as.formula(paste("ExchangeRate ~", vix_var, "+", sp500_var, "+", crudeoil_var, "+ RelDiffUnemp ")),
+      data = train_window,
+      model = "within"
+    )
+    
+    # Print the regression summary once
+    if (!summary_printed) {
+      cat("\n--- Regression Summary for Lag", lag_num, "---\n")
+      print(summary(model))
+      summary_printed <- TRUE
+    }
+    
+    # Manual prediction
+    prediction <- sum(coef(model) * as.numeric(test_window[ , names(coef(model)), drop = TRUE]))
+    
+    # Save prediction and true value
+    predictions <- c(predictions, prediction)
+    true_values <- c(true_values, as.numeric(test_window$ExchangeRate))
+    dates <- c(dates, as.character(test_window$Date))
+  }
+  
+  # Combine results into a data frame
+  results <- data.frame(
+    Date = as.Date(dates),
+    Predicted = predictions,
+    Actual = true_values
+  )
+  
+  # Calculate RMSE
+  rmse <- sqrt(mean((results$Predicted - results$Actual)^2, na.rm = TRUE))
+  
+  return(list(results = results, rmse = rmse))
+}
+
+# Run models for each lag and store results
+results_list <- list()
+for (lag in 1:5) {
+  model_results <- run_model(lag)
+  results_list[[paste0("Model_Lag", lag)]] <- model_results
+}
+
+# Step 5: Display RMSE for each model
+for (lag in 1:5) {
+  print(paste("RMSE for Model with Lag", lag, ":", results_list[[paste0("Model_Lag", lag)]]$rmse))
+}
+
+```
+```{r}
+# Load required libraries
+library(dplyr)
+library(plm)
+
+# Correct lag calculation
+data_with_lags <- final_dataset %>%
+  group_by(Country) %>%  # Ensure lags are calculated within each country
+  mutate(
+    VIX_lag1 = dplyr::lag(VIX, 1), VIX_lag2 = dplyr::lag(VIX, 2), 
+    VIX_lag3 = dplyr::lag(VIX, 3), VIX_lag4 = dplyr::lag(VIX, 4), 
+    VIX_lag5 = dplyr::lag(VIX, 5),
+    SP500_lag1 = dplyr::lag(SP500, 1), SP500_lag2 = dplyr::lag(SP500, 2), 
+    SP500_lag3 = dplyr::lag(SP500, 3), SP500_lag4 = dplyr::lag(SP500, 4), 
+    SP500_lag5 = dplyr::lag(SP500, 5),
+    CrudeOil_lag1 = dplyr::lag(CrudeOil, 1), CrudeOil_lag2 = dplyr::lag(CrudeOil, 2), 
+    CrudeOil_lag3 = dplyr::lag(CrudeOil, 3), CrudeOil_lag4 = dplyr::lag(CrudeOil, 4), 
+    CrudeOil_lag5 = dplyr::lag(CrudeOil, 5)
+  ) %>%
+  ungroup()  # Ungroup after lag calculation
+
+# Drop rows with missing values due to lags
+data_with_lags <- na.omit(data_with_lags)
+
+# Convert to pdata.frame for panel data analysis
+pdata <- pdata.frame(data_with_lags, index = c("Country", "Date"))
+
+# Function to run a model for a specific lag
+run_model <- function(lag_num) {
+  # Variable names for the specified lag
+  vix_var <- paste0("VIX_lag", lag_num)
+  sp500_var <- paste0("SP500_lag", lag_num)
+  crudeoil_var <- paste0("CrudeOil_lag", lag_num)
+  
+  predictions <- c()  # Vector to store predictions
+  true_values <- c()  # Vector to store true values
+  dates <- c()        # Vector to store predicted dates
+  
+  # Flag to print the regression summary only once per lag
+  summary_printed <- FALSE
+  
+  # Rolling window
+  for (i in 1:(nrow(pdata) - 30)) {
+    # Define training and testing windows
+    train_window <- pdata[i:(i + 28), ]
+    test_window <- pdata[i + 29, , drop = FALSE]  # Single-row test window
+    
+    # Fit the plm model
+    model <- plm(
+      as.formula(paste("ExchangeRate ~", vix_var, "+", sp500_var, "+", crudeoil_var, "+ RelDiffGDP ")),
+      data = train_window,
+      model = "within"
+    )
+    
+    # Print the regression summary once
+    if (!summary_printed) {
+      cat("\n--- Regression Summary for Lag", lag_num, "---\n")
+      print(summary(model))
+      summary_printed <- TRUE
+    }
+    
+    # Manual prediction
+    prediction <- sum(coef(model) * as.numeric(test_window[ , names(coef(model)), drop = TRUE]))
+    
+    # Save prediction and true value
+    predictions <- c(predictions, prediction)
+    true_values <- c(true_values, as.numeric(test_window$ExchangeRate))
+    dates <- c(dates, as.character(test_window$Date))
+  }
+  
+  # Combine results into a data frame
+  results <- data.frame(
+    Date = as.Date(dates),
+    Predicted = predictions,
+    Actual = true_values
+  )
+  
+  # Calculate RMSE
+  rmse <- sqrt(mean((results$Predicted - results$Actual)^2, na.rm = TRUE))
+  
+  return(list(results = results, rmse = rmse))
+}
+
+# Run models for each lag and store results
+results_list <- list()
+for (lag in 1:5) {
+  model_results <- run_model(lag)
+  results_list[[paste0("Model_Lag", lag)]] <- model_results
+}
+
+# Step 5: Display RMSE for each model
+for (lag in 1:5) {
+  print(paste("RMSE for Model with Lag", lag, ":", results_list[[paste0("Model_Lag", lag)]]$rmse))
+}
+
+```
+
+
+```{r}
+options(warn = -1)
+
+library(dplyr)
+library(ggplot2)
+library(Metrics)  # For RMSE calculation
+
+# Define the rolling prediction function
+rolling_prediction_lag <- function(data, lag, window_size = 29) {
+  data <- data %>% mutate(Predicted_ERPC = NA)  # Initialize a column for predictions
+  
+  # Track residuals for RMSE calculation
+  residuals <- numeric()
+  
+  # Flag to ensure the regression summary is printed only once per lag
+  summary_printed <- FALSE
+  
+  # Loop through the dataset to predict the next day
+  for (i in seq(window_size + 1, nrow(data))) {
+    # Training data: Previous `window_size` days
+    train_data <- data[(i - window_size):(i - 1), ]
+    
+    # Test data: Current day (the day we want to predict)
+    test_data <- data[i, , drop = FALSE]
+    
+    # Ensure there are no missing values in the training data
+    lag_columns <- c(
+      paste0("VIXPC_lag", lag),
+      paste0("CrudeOilPC_lag", lag),
+      paste0("SP500PC_lag", lag)
+    )
+    if (all(!is.na(train_data[["ERPC"]])) &&
+        all(!is.na(train_data[lag_columns]))) {
+      
+      # Train a linear regression model using the specified lag and other variables
+      model <- lm(
+        as.formula(paste("ERPC ~", 
+                         paste(lag_columns, collapse = " + "), 
+                         "+ RelDiffCPI ")), 
+        data = train_data
+      )
+      
+      # Print the summary of the regression model once
+      if (!summary_printed) {
+        cat("\n--- Regression Summary for Lag", lag, "---\n")
+        print(summary(model))
+        summary_printed <- TRUE
+      }
+      
+      # Predict ExchangeRate for the current day
+      prediction <- predict(model, newdata = test_data)
+      
+      # Add the prediction to the dataset
+      data$Predicted_ERPC[i] <- prediction
+      
+      # Calculate residual and store it
+      residuals <- c(residuals, test_data$ERPC - prediction)
+    }
+  }
+  
+  # Calculate RMSE and print it
+  rmse_value <- rmse(data$ERPC[!is.na(data$Predicted_ERPC)], 
+                     data$Predicted_ERPC[!is.na(data$Predicted_ERPC)])
+  cat("\n--- RMSE for Lag", lag, ": ", rmse_value, "---\n")
+  
+  return(data)
+}
+
+# Define a function to process and generate predictions for each country
+process_country_data <- function(data, country_name, window_size = 29) {
+  cat("\n--- Processing Country:", country_name, "---\n")
+  
+  # Filter the dataset for the specific country
+  country_data <- data %>%
+    filter(Country == country_name) %>%
+    select(Country, Country_ID, Date, VIXPC, ERPC, CrudeOilPC, SP500PC, RelDiffCPI) %>%
+    arrange(Date) %>%
+    group_by(Country) %>%
+    mutate(
+      VIXPC_lag1 = lag(VIXPC, 1),
+      VIXPC_lag2 = lag(VIXPC, 2),
+      VIXPC_lag3 = lag(VIXPC, 3),
+      VIXPC_lag4 = lag(VIXPC, 4),
+      VIXPC_lag5 = lag(VIXPC, 5),
+      CrudeOilPC_lag1 = lag(CrudeOilPC, 1),
+      CrudeOilPC_lag2 = lag(CrudeOilPC, 2),
+      CrudeOilPC_lag3 = lag(CrudeOilPC, 3),
+      CrudeOilPC_lag4 = lag(CrudeOilPC, 4),
+      CrudeOilPC_lag5 = lag(CrudeOilPC, 5),
+      SP500PC_lag1 = lag(SP500PC, 1),
+      SP500PC_lag2 = lag(SP500PC, 2),
+      SP500PC_lag3 = lag(SP500PC, 3),
+      SP500PC_lag4 = lag(SP500PC, 4),
+      SP500PC_lag5 = lag(SP500PC, 5)
+    ) %>%
+    ungroup()
+  
+  # Initialize the final dataset for predictions
+  final_country_data <- country_data
+  
+  # Apply rolling prediction for each lag
+  for (lag in 1:5) {
+    predictions <- rolling_prediction_lag(country_data, lag, window_size)
+    final_country_data <- final_country_data %>%
+      left_join(predictions %>% select(Date, Predicted_ERPC) %>% 
+                  rename(!!paste0("Predicted_ERPC_Lag", lag) := Predicted_ERPC), by = "Date")
+  }
+  
+  # Save graphs for each lag
+  for (lag in 1:5) {
+    results_filtered <- final_country_data %>%
+      select(Date, ERPC, !!sym(paste0("Predicted_ERPC_Lag", lag))) %>%
+      rename(Predicted_ERPC = !!paste0("Predicted_ERPC_Lag", lag)) %>%
+      filter(!is.na(Predicted_ERPC))
+    
+    # Plot actual vs predicted exchange rates
+    plot <- ggplot(results_filtered, aes(x = Date)) +
+      geom_line(aes(y = ERPC, color = "Actual")) +
+      geom_line(aes(y = Predicted_ERPC, color = "Predicted")) +
+      labs(
+        title = paste("Rolling Window Exchange Rate PC Prediction for", country_name, "(Lag", lag, ")"),
+        x = "Date",
+        y = "ERPC",
+        color = "Legend"
+      ) +
+      theme_minimal()
+    
+    # Save the plot as a PNG file
+    ggsave(filename = paste0(country_name, "_ERPC_Lag", lag, ".png"), plot = plot, width = 10, height = 6)
+  }
+  
+  # Save the final dataset to a CSV file
+  write.csv(final_country_data, paste0("Final_Predicted_ERPC_", country_name, ".csv"), row.names = FALSE)
+  
+  return(final_country_data)
+}
+
+# Process data for all countries
+unique_countries <- unique(final_dataset$Country)
+all_countries_results <- list()
+
+for (country in unique_countries) {
+  all_countries_results[[country]] <- process_country_data(final_dataset, country)
+}
+
+# Access results for a specific country
+# Example: Access results for "Australia"
+print(all_countries_results[["Japan"]])
+
+```
+```{r}
+options(warn = -1)
+
+library(dplyr)
+library(ggplot2)
+library(Metrics)  # For RMSE calculation
+
+# Define the rolling prediction function
+rolling_prediction_lag <- function(data, lag, window_size = 29) {
+  data <- data %>% mutate(Predicted_ERPC = NA)  # Initialize a column for predictions
+  
+  # Track residuals for RMSE calculation
+  residuals <- numeric()
+  
+  # Flag to ensure the regression summary is printed only once per lag
+  summary_printed <- FALSE
+  
+  # Loop through the dataset to predict the next day
+  for (i in seq(window_size + 1, nrow(data))) {
+    # Training data: Previous `window_size` days
+    train_data <- data[(i - window_size):(i - 1), ]
+    
+    # Test data: Current day (the day we want to predict)
+    test_data <- data[i, , drop = FALSE]
+    
+    # Ensure there are no missing values in the training data
+    lag_columns <- c(
+      paste0("VIXPC_lag", lag),
+      paste0("CrudeOilPC_lag", lag),
+      paste0("SP500PC_lag", lag)
+    )
+    if (all(!is.na(train_data[["ERPC"]])) &&
+        all(!is.na(train_data[lag_columns]))) {
+      
+      # Train a linear regression model using the specified lag and other variables
+      model <- lm(
+        as.formula(paste("ERPC ~", 
+                         paste(lag_columns, collapse = " + "), 
+                         "+ RelDiffUnemp ")), 
+        data = train_data
+      )
+      
+      # Print the summary of the regression model once
+      if (!summary_printed) {
+        cat("\n--- Regression Summary for Lag", lag, "---\n")
+        print(summary(model))
+        summary_printed <- TRUE
+      }
+      
+      # Predict ExchangeRate for the current day
+      prediction <- predict(model, newdata = test_data)
+      
+      # Add the prediction to the dataset
+      data$Predicted_ERPC[i] <- prediction
+      
+      # Calculate residual and store it
+      residuals <- c(residuals, test_data$ERPC - prediction)
+    }
+  }
+  
+  # Calculate RMSE and print it
+  rmse_value <- rmse(data$ERPC[!is.na(data$Predicted_ERPC)], 
+                     data$Predicted_ERPC[!is.na(data$Predicted_ERPC)])
+  cat("\n--- RMSE for Lag", lag, ": ", rmse_value, "---\n")
+  
+  return(data)
+}
+
+# Define a function to process and generate predictions for each country
+process_country_data <- function(data, country_name, window_size = 29) {
+  cat("\n--- Processing Country:", country_name, "---\n")
+  
+  # Filter the dataset for the specific country
+  country_data <- data %>%
+    filter(Country == country_name) %>%
+    select(Country, Country_ID, Date, VIXPC, ERPC, CrudeOilPC, SP500PC, RelDiffUnemp) %>%
+    arrange(Date) %>%
+    group_by(Country) %>%
+    mutate(
+      VIXPC_lag1 = lag(VIXPC, 1),
+      VIXPC_lag2 = lag(VIXPC, 2),
+      VIXPC_lag3 = lag(VIXPC, 3),
+      VIXPC_lag4 = lag(VIXPC, 4),
+      VIXPC_lag5 = lag(VIXPC, 5),
+      CrudeOilPC_lag1 = lag(CrudeOilPC, 1),
+      CrudeOilPC_lag2 = lag(CrudeOilPC, 2),
+      CrudeOilPC_lag3 = lag(CrudeOilPC, 3),
+      CrudeOilPC_lag4 = lag(CrudeOilPC, 4),
+      CrudeOilPC_lag5 = lag(CrudeOilPC, 5),
+      SP500PC_lag1 = lag(SP500PC, 1),
+      SP500PC_lag2 = lag(SP500PC, 2),
+      SP500PC_lag3 = lag(SP500PC, 3),
+      SP500PC_lag4 = lag(SP500PC, 4),
+      SP500PC_lag5 = lag(SP500PC, 5)
+    ) %>%
+    ungroup()
+  
+  # Initialize the final dataset for predictions
+  final_country_data <- country_data
+  
+  # Apply rolling prediction for each lag
+  for (lag in 1:5) {
+    predictions <- rolling_prediction_lag(country_data, lag, window_size)
+    final_country_data <- final_country_data %>%
+      left_join(predictions %>% select(Date, Predicted_ERPC) %>% 
+                  rename(!!paste0("Predicted_ERPC_Lag", lag) := Predicted_ERPC), by = "Date")
+  }
+  
+  # Save graphs for each lag
+  for (lag in 1:5) {
+    results_filtered <- final_country_data %>%
+      select(Date, ERPC, !!sym(paste0("Predicted_ERPC_Lag", lag))) %>%
+      rename(Predicted_ERPC = !!paste0("Predicted_ERPC_Lag", lag)) %>%
+      filter(!is.na(Predicted_ERPC))
+    
+    # Plot actual vs predicted exchange rates
+    plot <- ggplot(results_filtered, aes(x = Date)) +
+      geom_line(aes(y = ERPC, color = "Actual")) +
+      geom_line(aes(y = Predicted_ERPC, color = "Predicted")) +
+      labs(
+        title = paste("Rolling Window Exchange Rate PC Prediction for", country_name, "(Lag", lag, ")"),
+        x = "Date",
+        y = "ERPC",
+        color = "Legend"
+      ) +
+      theme_minimal()
+    
+    # Save the plot as a PNG file
+    ggsave(filename = paste0(country_name, "_ERPC_Lag2", lag, ".png"), plot = plot, width = 10, height = 6)
+  }
+  
+  # Save the final dataset to a CSV file
+  write.csv(final_country_data, paste0("Final_Predicted_ERPC_2", country_name, ".csv"), row.names = FALSE)
+  
+  return(final_country_data)
+}
+
+# Process data for all countries
+unique_countries <- unique(final_dataset$Country)
+all_countries_results <- list()
+
+for (country in unique_countries) {
+  all_countries_results[[country]] <- process_country_data(final_dataset, country)
+}
+
+# Access results for a specific country
+# Example: Access results for "Australia"
+print(all_countries_results[["Japan"]])
+
+```
+```{r}
+options(warn = -1)
+
+library(dplyr)
+library(ggplot2)
+library(Metrics)  # For RMSE calculation
+
+# Define the rolling prediction function
+rolling_prediction_lag <- function(data, lag, window_size = 29) {
+  data <- data %>% mutate(Predicted_ERPC = NA)  # Initialize a column for predictions
+  
+  # Track residuals for RMSE calculation
+  residuals <- numeric()
+  
+  # Flag to ensure the regression summary is printed only once per lag
+  summary_printed <- FALSE
+  
+  # Loop through the dataset to predict the next day
+  for (i in seq(window_size + 1, nrow(data))) {
+    # Training data: Previous `window_size` days
+    train_data <- data[(i - window_size):(i - 1), ]
+    
+    # Test data: Current day (the day we want to predict)
+    test_data <- data[i, , drop = FALSE]
+    
+    # Ensure there are no missing values in the training data
+    lag_columns <- c(
+      paste0("VIXPC_lag", lag),
+      paste0("CrudeOilPC_lag", lag),
+      paste0("SP500PC_lag", lag)
+    )
+    if (all(!is.na(train_data[["ERPC"]])) &&
+        all(!is.na(train_data[lag_columns]))) {
+      
+      # Train a linear regression model using the specified lag and other variables
+      model <- lm(
+        as.formula(paste("ERPC ~", 
+                         paste(lag_columns, collapse = " + "), 
+                         "+ RelDiffGDP ")), 
+        data = train_data
+      )
+      
+      # Print the summary of the regression model once
+      if (!summary_printed) {
+        cat("\n--- Regression Summary for Lag", lag, "---\n")
+        print(summary(model))
+        summary_printed <- TRUE
+      }
+      
+      # Predict ExchangeRate for the current day
+      prediction <- predict(model, newdata = test_data)
+      
+      # Add the prediction to the dataset
+      data$Predicted_ERPC[i] <- prediction
+      
+      # Calculate residual and store it
+      residuals <- c(residuals, test_data$ERPC - prediction)
+    }
+  }
+  
+  # Calculate RMSE and print it
+  rmse_value <- rmse(data$ERPC[!is.na(data$Predicted_ERPC)], 
+                     data$Predicted_ERPC[!is.na(data$Predicted_ERPC)])
+  cat("\n--- RMSE for Lag", lag, ": ", rmse_value, "---\n")
+  
+  return(data)
+}
+
+# Define a function to process and generate predictions for each country
+process_country_data <- function(data, country_name, window_size = 29) {
+  cat("\n--- Processing Country:", country_name, "---\n")
+  
+  # Filter the dataset for the specific country
+  country_data <- data %>%
+    filter(Country == country_name) %>%
+    select(Country, Country_ID, Date, VIXPC, ERPC, CrudeOilPC, SP500PC, RelDiffGDP) %>%
+    arrange(Date) %>%
+    group_by(Country) %>%
+    mutate(
+      VIXPC_lag1 = lag(VIXPC, 1),
+      VIXPC_lag2 = lag(VIXPC, 2),
+      VIXPC_lag3 = lag(VIXPC, 3),
+      VIXPC_lag4 = lag(VIXPC, 4),
+      VIXPC_lag5 = lag(VIXPC, 5),
+      CrudeOilPC_lag1 = lag(CrudeOilPC, 1),
+      CrudeOilPC_lag2 = lag(CrudeOilPC, 2),
+      CrudeOilPC_lag3 = lag(CrudeOilPC, 3),
+      CrudeOilPC_lag4 = lag(CrudeOilPC, 4),
+      CrudeOilPC_lag5 = lag(CrudeOilPC, 5),
+      SP500PC_lag1 = lag(SP500PC, 1),
+      SP500PC_lag2 = lag(SP500PC, 2),
+      SP500PC_lag3 = lag(SP500PC, 3),
+      SP500PC_lag4 = lag(SP500PC, 4),
+      SP500PC_lag5 = lag(SP500PC, 5)
+    ) %>%
+    ungroup()
+  
+  # Initialize the final dataset for predictions
+  final_country_data <- country_data
+  
+  # Apply rolling prediction for each lag
+  for (lag in 1:5) {
+    predictions <- rolling_prediction_lag(country_data, lag, window_size)
+    final_country_data <- final_country_data %>%
+      left_join(predictions %>% select(Date, Predicted_ERPC) %>% 
+                  rename(!!paste0("Predicted_ERPC_Lag", lag) := Predicted_ERPC), by = "Date")
+  }
+  
+  # Save graphs for each lag
+  for (lag in 1:5) {
+    results_filtered <- final_country_data %>%
+      select(Date, ERPC, !!sym(paste0("Predicted_ERPC_Lag", lag))) %>%
+      rename(Predicted_ERPC = !!paste0("Predicted_ERPC_Lag", lag)) %>%
+      filter(!is.na(Predicted_ERPC))
+    
+    # Plot actual vs predicted exchange rates
+    plot <- ggplot(results_filtered, aes(x = Date)) +
+      geom_line(aes(y = ERPC, color = "Actual")) +
+      geom_line(aes(y = Predicted_ERPC, color = "Predicted")) +
+      labs(
+        title = paste("Rolling Window Exchange Rate PC Prediction for", country_name, "(Lag", lag, ")"),
+        x = "Date",
+        y = "ERPC",
+        color = "Legend"
+      ) +
+      theme_minimal()
+    
+    # Save the plot as a PNG file
+    ggsave(filename = paste0(country_name, "_ERPC_Lag3", lag, ".png"), plot = plot, width = 10, height = 6)
+  }
+  
+  # Save the final dataset to a CSV file
+  write.csv(final_country_data, paste0("Final_Predicted_ERPC_3", country_name, ".csv"), row.names = FALSE)
+  
+  return(final_country_data)
+}
+
+# Process data for all countries
+unique_countries <- unique(final_dataset$Country)
+all_countries_results <- list()
+
+for (country in unique_countries) {
+  all_countries_results[[country]] <- process_country_data(final_dataset, country)
+}
+
+# Access results for a specific country
+# Example: Access results for "Australia"
+print(all_countries_results[["Japan"]])
+```
+
+```{r}
+# Load required libraries
+library(dplyr)
+library(plm)
+
+# Correct lag calculation
+data_with_lags <- final_dataset %>%
+  group_by(Country) %>%  # Ensure lags are calculated within each country
+  mutate(
+    VIXPC_lag1 = dplyr::lag(VIXPC, 1), VIXPC_lag2 = dplyr::lag(VIXPC, 2), 
+    VIXPC_lag3 = dplyr::lag(VIXPC, 3), VIXPC_lag4 = dplyr::lag(VIXPC, 4), 
+    VIXPC_lag5 = dplyr::lag(VIXPC, 5),
+    SP500PC_lag1 = dplyr::lag(SP500PC, 1), SP500PC_lag2 = dplyr::lag(SP500PC, 2), 
+    SP500PC_lag3 = dplyr::lag(SP500PC, 3), SP500PC_lag4 = dplyr::lag(SP500PC, 4), 
+    SP500PC_lag5 = dplyr::lag(SP500PC, 5),
+    CrudeOilPC_lag1 = dplyr::lag(CrudeOilPC, 1), CrudeOilPC_lag2 = dplyr::lag(CrudeOilPC, 2), 
+    CrudeOilPC_lag3 = dplyr::lag(CrudeOilPC, 3), CrudeOilPC_lag4 = dplyr::lag(CrudeOilPC, 4), 
+    CrudeOilPC_lag5 = dplyr::lag(CrudeOilPC, 5)
+  ) %>%
+  ungroup()  # Ungroup after lag calculation
+
+# Drop rows with missing values due to lags
+data_with_lags <- na.omit(data_with_lags)
+
+# Convert to pdata.frame for panel data analysis
+pdata <- pdata.frame(data_with_lags, index = c("Country", "Date"))
+
+# Function to run a model for a specific lag
+run_model <- function(lag_num) {
+  # Variable names for the specified lag
+  vixPC_var <- paste0("VIXPC_lag", lag_num)
+  sp500PC_var <- paste0("SP500PC_lag", lag_num)
+  crudeoilPC_var <- paste0("CrudeOilPC_lag", lag_num)
+  
+  predictions <- c()  # Vector to store predictions
+  true_values <- c()  # Vector to store true values
+  dates <- c()        # Vector to store predicted dates
+  
+  # Flag to print the regression summary only once per lag
+  summary_printed <- FALSE
+  
+  # Rolling window
+  for (i in 1:(nrow(pdata) - 30)) {
+    # Define training and testing windows
+    train_window <- pdata[i:(i + 28), ]
+    test_window <- pdata[i + 29, , drop = FALSE]  # Single-row test window
+    
+    # Fit the plm model
+    model <- plm(
+      as.formula(paste("ERPC ~", vixPC_var, "+", sp500PC_var, "+", crudeoilPC_var, "+ RelDiffCPI ")),
+      data = train_window,
+      model = "within"
+    )
+    
+    # Print the regression summary once
+    if (!summary_printed) {
+      cat("\n--- Regression Summary for Lag", lag_num, "---\n")
+      print(summary(model))
+      summary_printed <- TRUE
+    }
+    
+    # Manual prediction
+    prediction <- sum(coef(model) * as.numeric(test_window[ , names(coef(model)), drop = TRUE]))
+    
+    # Save prediction and true value
+    predictions <- c(predictions, prediction)
+    true_values <- c(true_values, as.numeric(test_window$ERPC))
+    dates <- c(dates, as.character(test_window$Date))
+  }
+  
+  # Combine results into a data frame
+  results <- data.frame(
+    Date = as.Date(dates),
+    Predicted = predictions,
+    Actual = true_values
+  )
+  
+  # Calculate RMSE
+  rmse <- sqrt(mean((results$Predicted - results$Actual)^2, na.rm = TRUE))
+  
+  return(list(results = results, rmse = rmse))
+}
+
+# Run models for each lag and store results
+results_list <- list()
+for (lag in 1:5) {
+  model_results <- run_model(lag)
+  results_list[[paste0("Model_Lag", lag)]] <- model_results
+}
+
+# Step 5: Display RMSE for each model
+for (lag in 1:5) {
+  print(paste("RMSE for Model with Lag", lag, ":", results_list[[paste0("Model_Lag", lag)]]$rmse))
+}
+
+```
+
+```{r}
+# Load required libraries
+library(dplyr)
+library(plm)
+
+# Correct lag calculation
+data_with_lags <- final_dataset %>%
+  group_by(Country) %>%  # Ensure lags are calculated within each country
+  mutate(
+    VIXPC_lag1 = dplyr::lag(VIXPC, 1), VIXPC_lag2 = dplyr::lag(VIXPC, 2), 
+    VIXPC_lag3 = dplyr::lag(VIXPC, 3), VIXPC_lag4 = dplyr::lag(VIXPC, 4), 
+    VIXPC_lag5 = dplyr::lag(VIXPC, 5),
+    SP500PC_lag1 = dplyr::lag(SP500PC, 1), SP500PC_lag2 = dplyr::lag(SP500PC, 2), 
+    SP500PC_lag3 = dplyr::lag(SP500PC, 3), SP500PC_lag4 = dplyr::lag(SP500PC, 4), 
+    SP500PC_lag5 = dplyr::lag(SP500PC, 5),
+    CrudeOilPC_lag1 = dplyr::lag(CrudeOilPC, 1), CrudeOilPC_lag2 = dplyr::lag(CrudeOilPC, 2), 
+    CrudeOilPC_lag3 = dplyr::lag(CrudeOilPC, 3), CrudeOilPC_lag4 = dplyr::lag(CrudeOilPC, 4), 
+    CrudeOilPC_lag5 = dplyr::lag(CrudeOilPC, 5)
+  ) %>%
+  ungroup()  # Ungroup after lag calculation
+
+# Drop rows with missing values due to lags
+data_with_lags <- na.omit(data_with_lags)
+
+# Convert to pdata.frame for panel data analysis
+pdata <- pdata.frame(data_with_lags, index = c("Country", "Date"))
+
+# Function to run a model for a specific lag
+run_model <- function(lag_num) {
+  # Variable names for the specified lag
+  vixPC_var <- paste0("VIXPC_lag", lag_num)
+  sp500PC_var <- paste0("SP500PC_lag", lag_num)
+  crudeoilPC_var <- paste0("CrudeOilPC_lag", lag_num)
+  
+  predictions <- c()  # Vector to store predictions
+  true_values <- c()  # Vector to store true values
+  dates <- c()        # Vector to store predicted dates
+  
+  # Flag to print the regression summary only once per lag
+  summary_printed <- FALSE
+  
+  # Rolling window
+  for (i in 1:(nrow(pdata) - 30)) {
+    # Define training and testing windows
+    train_window <- pdata[i:(i + 28), ]
+    test_window <- pdata[i + 29, , drop = FALSE]  # Single-row test window
+    
+    # Fit the plm model
+    model <- plm(
+      as.formula(paste("ERPC ~", vixPC_var, "+", sp500PC_var, "+", crudeoilPC_var, "+ RelDiffUnemp ")),
+      data = train_window,
+      model = "within"
+    )
+    
+    # Print the regression summary once
+    if (!summary_printed) {
+      cat("\n--- Regression Summary for Lag", lag_num, "---\n")
+      print(summary(model))
+      summary_printed <- TRUE
+    }
+    
+    # Manual prediction
+    prediction <- sum(coef(model) * as.numeric(test_window[ , names(coef(model)), drop = TRUE]))
+    
+    # Save prediction and true value
+    predictions <- c(predictions, prediction)
+    true_values <- c(true_values, as.numeric(test_window$ERPC))
+    dates <- c(dates, as.character(test_window$Date))
+  }
+  
+  # Combine results into a data frame
+  results <- data.frame(
+    Date = as.Date(dates),
+    Predicted = predictions,
+    Actual = true_values
+  )
+  
+  # Calculate RMSE
+  rmse <- sqrt(mean((results$Predicted - results$Actual)^2, na.rm = TRUE))
+  
+  return(list(results = results, rmse = rmse))
+}
+
+# Run models for each lag and store results
+results_list <- list()
+for (lag in 1:5) {
+  model_results <- run_model(lag)
+  results_list[[paste0("Model_Lag", lag)]] <- model_results
+}
+
+# Step 5: Display RMSE for each model
+for (lag in 1:5) {
+  print(paste("RMSE for Model with Lag", lag, ":", results_list[[paste0("Model_Lag", lag)]]$rmse))
+}
+
+```
+```{r}
+# Load required libraries
+library(dplyr)
+library(plm)
+
+# Correct lag calculation
+data_with_lags <- final_dataset %>%
+  group_by(Country) %>%  # Ensure lags are calculated within each country
+  mutate(
+    VIXPC_lag1 = dplyr::lag(VIXPC, 1), VIXPC_lag2 = dplyr::lag(VIXPC, 2), 
+    VIXPC_lag3 = dplyr::lag(VIXPC, 3), VIXPC_lag4 = dplyr::lag(VIXPC, 4), 
+    VIXPC_lag5 = dplyr::lag(VIXPC, 5),
+    SP500PC_lag1 = dplyr::lag(SP500PC, 1), SP500PC_lag2 = dplyr::lag(SP500PC, 2), 
+    SP500PC_lag3 = dplyr::lag(SP500PC, 3), SP500PC_lag4 = dplyr::lag(SP500PC, 4), 
+    SP500PC_lag5 = dplyr::lag(SP500PC, 5),
+    CrudeOilPC_lag1 = dplyr::lag(CrudeOilPC, 1), CrudeOilPC_lag2 = dplyr::lag(CrudeOilPC, 2), 
+    CrudeOilPC_lag3 = dplyr::lag(CrudeOilPC, 3), CrudeOilPC_lag4 = dplyr::lag(CrudeOilPC, 4), 
+    CrudeOilPC_lag5 = dplyr::lag(CrudeOilPC, 5)
+  ) %>%
+  ungroup()  # Ungroup after lag calculation
+
+# Drop rows with missing values due to lags
+data_with_lags <- na.omit(data_with_lags)
+
+# Convert to pdata.frame for panel data analysis
+pdata <- pdata.frame(data_with_lags, index = c("Country", "Date"))
+
+# Function to run a model for a specific lag
+run_model <- function(lag_num) {
+  # Variable names for the specified lag
+  vixPC_var <- paste0("VIXPC_lag", lag_num)
+  sp500PC_var <- paste0("SP500PC_lag", lag_num)
+  crudeoilPC_var <- paste0("CrudeOilPC_lag", lag_num)
+  
+  predictions <- c()  # Vector to store predictions
+  true_values <- c()  # Vector to store true values
+  dates <- c()        # Vector to store predicted dates
+  
+  # Flag to print the regression summary only once per lag
+  summary_printed <- FALSE
+  
+  # Rolling window
+  for (i in 1:(nrow(pdata) - 30)) {
+    # Define training and testing windows
+    train_window <- pdata[i:(i + 28), ]
+    test_window <- pdata[i + 29, , drop = FALSE]  # Single-row test window
+    
+    # Fit the plm model
+    model <- plm(
+      as.formula(paste("ERPC ~", vixPC_var, "+", sp500PC_var, "+", crudeoilPC_var, "+ RelDiffGDP ")),
+      data = train_window,
+      model = "within"
+    )
+    
+    # Print the regression summary once
+    if (!summary_printed) {
+      cat("\n--- Regression Summary for Lag", lag_num, "---\n")
+      print(summary(model))
+      summary_printed <- TRUE
+    }
+    
+    # Manual prediction
+    prediction <- sum(coef(model) * as.numeric(test_window[ , names(coef(model)), drop = TRUE]))
+    
+    # Save prediction and true value
+    predictions <- c(predictions, prediction)
+    true_values <- c(true_values, as.numeric(test_window$ERPC))
+    dates <- c(dates, as.character(test_window$Date))
+  }
+  
+  # Combine results into a data frame
+  results <- data.frame(
+    Date = as.Date(dates),
+    Predicted = predictions,
+    Actual = true_values
+  )
+  
+  # Calculate RMSE
+  rmse <- sqrt(mean((results$Predicted - results$Actual)^2, na.rm = TRUE))
+  
+  return(list(results = results, rmse = rmse))
+}
+
+# Run models for each lag and store results
+results_list <- list()
+for (lag in 1:5) {
+  model_results <- run_model(lag)
+  results_list[[paste0("Model_Lag", lag)]] <- model_results
+}
+
+# Step 5: Display RMSE for each model
+for (lag in 1:5) {
+  print(paste("RMSE for Model with Lag", lag, ":", results_list[[paste0("Model_Lag", lag)]]$rmse))
+}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
